@@ -4,25 +4,43 @@ import {
   TrendingUp, FileText, PenTool, Printer, Truck, Store, Users, Search, X, 
   Image as ImageIcon, Upload, Receipt, Plus, DollarSign, Paperclip, Mail, 
   Megaphone, Settings, RefreshCw, Share2, Download, Edit, Phone, Menu, Trash2, 
-  Settings2, UserPlus, Send, UserCog
+  Settings2, UserPlus, Send, UserCog, Info
 } from 'lucide-react';
 
-// --- Firebase Imports ---
+// ==========================================
+// 1. הגדרות מסד נתונים - Firebase
+// ==========================================
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 
-// --- Firebase Initialization ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const firebaseConfig = {
+  apiKey: "AIzaSyBACO6rv7KvdmWyPBPp1RzaeVUyQorQpVI",
+  authDomain: "yhydeshboard.firebaseapp.com",
+  projectId: "yhydeshboard",
+  storageBucket: "yhydeshboard.firebasestorage.app",
+  messagingSenderId: "498271801335",
+  appId: "1:498271801335:web:1609f07e024ac66709e8f2",
+  measurementId: "G-GHK9P9E47J"
+};
+
 const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
 const auth = app ? getAuth(app) : null;
 let db = app ? getFirestore(app) : null;
-const appId = typeof __app_id !== 'undefined' ? String(__app_id).replace(/[^a-zA-Z0-9_-]/g, '_') : 'default-publisher-app';
+const appId = 'publisher_erp_v1'; 
+const getCollRef = (collName) => collection(db, 'erp', appId, collName);
+const getDocRef = (collName, docId) => doc(db, 'erp', appId, collName, docId);
 
-const getCollRef = (collName) => collection(db, 'artifacts', appId, 'public', 'data', collName);
-const getDocRef = (collName, docId) => doc(db, 'artifacts', appId, 'public', 'data', collName, docId);
+// ==========================================
+// 2. הגדרות שליחת מיילים - EmailJS
+// ==========================================
+const EMAILJS_SERVICE_ID = "service_65ojtol";
+const EMAILJS_TEMPLATE_ID = "template_ye1ep37";
+const EMAILJS_PUBLIC_KEY = "7Xb1V_hTF9rs61RxX";
 
-// --- Mock / Initial Data (Used for First-time Seeding) ---
+// ==========================================
+// 3. נתוני הדגמה 
+// ==========================================
 const initialStatsData = {
   monthly: { inProduction: '12', completed: '145', sold: '3,240', revenue: '142,500', trend: '+18.5%', alerts: '3' },
   yearly: { inProduction: '12', completed: '34', sold: '38,500', revenue: '1,750,000', trend: '+42.3%', alerts: '3' }
@@ -42,10 +60,9 @@ const initialTasksFlat = [
 
 const initialSuppliers = [
   { name: 'מחסן ראשי - פתח תקווה', type: 'מחסן לוגיסטי', contact: 'אבי כהן', phone: '050-1234567', email: 'avi@publisher-logistics.co.il', status: 'פעיל - יש הסכם' },
-  { name: 'צומת ספרים - מרלו"ג', type: 'רשת קמעונאית', contact: 'רונית לוי', phone: '052-7654321', email: 'ronit@zomet.co.il', status: 'פעיל - יש הסכם' },
+  { name: 'צומת ספרים - מרלו״ג', type: 'רשת קמעונאית', contact: 'רונית לוי', phone: '052-7654321', email: 'ronit@zomet.co.il', status: 'פעיל - יש הסכם' },
   { name: 'סטימצקי - הפצה', type: 'רשת קמעונאית', contact: 'דני אלמגור', phone: '054-9876543', email: 'dani@steimatzky.co.il', status: 'ממתין לספרים' },
-  { name: 'דפוס קורן בע"מ', type: 'בית דפוס', contact: 'שמואל קורן', phone: '02-6543210', email: 'office@koren-print.co.il', status: 'פעיל - יש הסכם' },
-  { name: 'חנויות עצמאיות (הפצה מרוכזת)', type: 'הפצה', contact: 'יעל מזרחי', phone: '050-9988776', email: 'indie-dist@publisher.co.il', status: 'אין שיתוף פעולה' }
+  { name: 'דפוס קורן בע"מ', type: 'בית דפוס', contact: 'שמואל קורן', phone: '02-6543210', email: 'office@koren-print.co.il', status: 'פעיל - יש הסכם' }
 ];
 
 const getStatusColor = (status) => {
@@ -65,14 +82,12 @@ const initialCampaigns = [
 
 const initialPrCopies = [
   { recipient: 'עמית סגל (חדשות 12)', book: 'כלכלת המחר', date: '10/11/2026', status: 'נמסר ליעד' },
-  { recipient: 'book.tok.il@ (טיקטוק)', book: 'אגדות היער השחור', date: '12/11/2026', status: 'במשלוח' },
   { recipient: 'מוסף ספרים - הארץ', book: 'מסע אל הלא נודע', date: '01/11/2026', status: 'פורסמה ביקורת' }
 ];
 
 const initialIntegrations = [
   { id: 'morning', name: 'Morning (חשבונית ירוקה)', type: 'הנהלת חשבונות ומסמכים', connected: true, lastSync: 'לפני 15 דקות', logo: 'M' },
-  { id: 'shopify', name: 'Shopify (אתר ההוצאה)', type: 'פלטפורמת מסחר / חנות אונליין', connected: true, lastSync: 'לפני שעתיים', logo: 'S' },
-  { id: 'woocommerce', name: 'WooCommerce', type: 'פלטפורמת מסחר / חנות אונליין', connected: false, lastSync: 'לא סונכרן מעולם', logo: 'W' }
+  { id: 'shopify', name: 'Shopify (אתר ההוצאה)', type: 'פלטפורמת מסחר / חנות אונליין', connected: true, lastSync: 'לפני שעתיים', logo: 'S' }
 ];
 
 const initialInventory = [
@@ -82,17 +97,8 @@ const initialInventory = [
     prices: { general: 110, supplier: 55, yeshiva: 70 },
     breakdown: [
       { supplier: 'מחסן ראשי - פתח תקווה', amount: 800 },
-      { supplier: 'צומת ספרים - מרלו"ג', amount: 250 },
+      { supplier: 'צומת ספרים - מרלו״ג', amount: 250 },
       { supplier: 'סטימצקי - הפצה', amount: 200 }
-    ]
-  },
-  { 
-    title: 'שירת הים (מהדורה 1)', author: 'דוד אלמגור', isbn: '978-965-987-654-3', threshold: 100, 
-    editions: [{ name: 'מהדורה 1', printRun: 500 }], publisherStock: 0,
-    prices: { general: 88, supplier: 44, yeshiva: 60 },
-    breakdown: [
-      { supplier: 'מחסן ראשי - פתח תקווה', amount: 15 },
-      { supplier: 'חנויות עצמאיות (הפצה מרוכזת)', amount: 30 }
     ]
   },
   { 
@@ -101,14 +107,14 @@ const initialInventory = [
     prices: { general: 120, supplier: 60, yeshiva: 80 },
     breakdown: [
       { supplier: 'מחסן ראשי - פתח תקווה', amount: 400 },
-      { supplier: 'צומת ספרים - מרלו"ג', amount: 300 },
+      { supplier: 'צומת ספרים - מרלו״ג', amount: 300 },
       { supplier: 'סטימצקי - הפצה', amount: 150 }
     ]
   }
 ];
 
 const initialValidUsers = [
-  { username: 'admin', password: 'admin2026', role: 'admin', name: 'מנהל' },
+  { username: 'admin', password: 'admin2026', role: 'admin', name: 'מנהל ראשי' },
   { username: 'view', password: 'view2026', role: 'viewer', name: 'צופה' }
 ];
 
@@ -118,6 +124,15 @@ export default function PublisherApp() {
   const [currentUserName, setCurrentUserName] = useState(''); 
   const [dashboardPeriod, setDashboardPeriod] = useState('monthly'); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // --- UI System States (Toasts & Confirms) ---
+  const [toastMessage, setToastMessage] = useState({ text: '', type: '' });
+  const [confirmDialog, setConfirmDialog] = useState(null);
+
+  const showToast = (text, type = 'info') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage({ text: '', type: '' }), 3500);
+  };
 
   // --- Firebase & Database States ---
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -188,15 +203,45 @@ export default function PublisherApp() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [newInvoice, setNewInvoice] = useState({ desc: '', amount: '' });
 
-  // Derived Kanban Tasks Object
   const tasks = {
     in_progress: tasksList.filter(t => t.status === 'in_progress'),
     published: tasksList.filter(t => t.status === 'published')
   };
 
-  // --- Integrations State ---
   const [integrations, setIntegrations] = useState(initialIntegrations);
   const [isSyncing, setIsSyncing] = useState(null);
+
+  // --- Background Email Sender ---
+  const sendEmailBackground = async (toEmail, subject, body) => {
+    if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_PUBLIC_KEY) {
+      showToast("EmailJS לא מוגדר. עובר לשימוש בתוכנת מייל רגילה...", "warning");
+      window.location.href = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      return;
+    }
+
+    try {
+      const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service_id: EMAILJS_SERVICE_ID,
+          template_id: EMAILJS_TEMPLATE_ID,
+          user_id: EMAILJS_PUBLIC_KEY,
+          template_params: { to_email: toEmail, subject: subject, message: body }
+        })
+      });
+
+      if (response.ok) {
+        showToast("האימייל נשלח בהצלחה ליעדו!", "success");
+      } else {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+    } catch (error) {
+      console.error("Error sending email:", error);
+      showToast("שגיאה בשליחת המייל. נסה שנית.", "error");
+    }
+  };
 
   // --- FIREBASE EFFECTS ---
   useEffect(() => {
@@ -206,13 +251,11 @@ export default function PublisherApp() {
     }
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
-        console.error("Auth error:", error);
+        console.warn("Auth error (Cloud disconnected):", error.message);
+        db = null; // מנתק את הענן במקרה של שגיאת הרשאות ועובר לעבודה מקומית
+        setIsDbReady(true);
       }
     };
     initAuth();
@@ -225,9 +268,7 @@ export default function PublisherApp() {
 
   useEffect(() => {
     if (!db || !isDbReady || !firebaseUser) return;
-
     const unsubs = [];
-
     const seedDatabase = async () => {
       try {
         const snap = await getDocs(getCollRef('inventory'));
@@ -242,21 +283,20 @@ export default function PublisherApp() {
         }
         return true;
       } catch (e) {
-        console.warn("Firebase permission denied. Falling back to local state mode.", e);
+        console.warn("Firebase fallback. Local state mode.", e);
         return false;
       }
     };
 
     seedDatabase().then((success) => {
       if (!success) {
-        db = null; // Disable DB completely if seeding/reading fails
+        db = null; 
         return;
       }
       const handleDbError = (err) => {
         console.warn("Firebase sync error, disabling cloud sync.", err);
         db = null;
       };
-
       try {
         unsubs.push(onSnapshot(getCollRef('inventory'), snap => setInventoryList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('suppliers'), snap => setSuppliersList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
@@ -283,12 +323,13 @@ export default function PublisherApp() {
       setUserRole(user.role);
       setCurrentUserName(user.name);
       setLoginError('');
+      showToast(`ברוך הבא, ${user.name}!`, 'success');
     } else {
       setLoginError('שם משתמש או סיסמה שגויים. נסה שוב.');
     }
   };
 
-  // User Management Handlers
+  // User Management
   const handleCreateUser = (e) => {
     e.preventDefault();
     if (!newUser.username || !newUser.password || !newUser.name) return;
@@ -298,11 +339,11 @@ export default function PublisherApp() {
     }]);
 
     if (newUser.email) {
-      const subject = encodeURIComponent("פרטי התחברות למערכת ניהול הוצאה לאור");
-      const body = encodeURIComponent(
-        `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת ניהול ההוצאה לאור.\nלהלן פרטי ההתחברות שלך:\n\nשם משתמש: ${newUser.username}\nסיסמה: ${newUser.password}\n\nהרשאה: ${newUser.role === 'admin' ? 'מנהל מערכת' : 'צופה (קריאה בלבד)'}\n\nבברכה,\nהנהלת המערכת`
-      );
-      window.location.href = `mailto:${newUser.email}?subject=${subject}&body=${body}`;
+      const subject = "פרטי התחברות למערכת ניהול הוצאה לאור";
+      const body = `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת הניהול.\n\nשם משתמש: ${newUser.username}\nסיסמה: ${newUser.password}\n\nבברכה,\nצוות המערכת`;
+      sendEmailBackground(newUser.email, subject, body);
+    } else {
+      showToast("משתמש נוצר בהצלחה במערכת", "success");
     }
 
     setNewUser({ name: '', username: '', password: '', role: 'viewer', email: '' });
@@ -311,15 +352,19 @@ export default function PublisherApp() {
 
   const handleRemoveUser = (usernameToRemove) => {
     if(usernameToRemove === 'admin') {
-      alert("לא ניתן למחוק את משתמש המנהל הראשי.");
+      showToast("לא ניתן למחוק את משתמש המנהל הראשי.", "error");
       return;
     }
-    if(window.confirm(`האם למחוק את המשתמש ${usernameToRemove}?`)) {
-      setUsersList(usersList.filter(u => u.username !== usernameToRemove));
-    }
+    setConfirmDialog({
+      message: `האם אתה בטוח שברצונך למחוק את המשתמש ${usernameToRemove}?`,
+      onConfirm: () => {
+        setUsersList(usersList.filter(u => u.username !== usernameToRemove));
+        showToast("המשתמש הוסר מהמערכת", "info");
+      }
+    });
   };
 
-  // Helper to calculate total stock
+  // Stock Calc
   const calculateTotalStock = (book) => {
     const suppliersTotal = (book.breakdown || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     return Number(book.publisherStock || 0) + suppliersTotal;
@@ -338,7 +383,7 @@ export default function PublisherApp() {
     document.body.removeChild(link);
   };
 
-  // Dashboard Stats Handlers
+  // Dashboard Edit
   const openEditStats = () => {
     setEditingStats({ ...statsData[dashboardPeriod] });
     setIsEditStatsModalOpen(true);
@@ -350,15 +395,17 @@ export default function PublisherApp() {
     if (db) await setDoc(getDocRef('globals', 'stats'), newData);
     else setStatsData(newData);
     setIsEditStatsModalOpen(false);
+    showToast("נתוני הדאשבורד עודכנו בהצלחה", "success");
   };
 
-  // Supplier Handlers
+  // Suppliers
   const handleAddSupplier = async (e) => {
     e.preventDefault();
     if (db) await addDoc(getCollRef('suppliers'), newSupplier);
     else setSuppliersList([...suppliersList, { ...newSupplier, id: Date.now().toString() }]);
     setIsAddSupplierModalOpen(false);
     setNewSupplier({ name: '', type: 'רשת קמעונאית', contact: '', phone: '', email: '', status: 'פעיל - יש הסכם' });
+    showToast("ספק חדש נוסף למערכת", "success");
   };
 
   const handleEditSupplierSubmit = async (e) => {
@@ -366,9 +413,10 @@ export default function PublisherApp() {
     if (db) await updateDoc(getDocRef('suppliers', editingSupplier.id), editingSupplier);
     else setSuppliersList(suppliersList.map(s => s.id === editingSupplier.id ? editingSupplier : s));
     setIsEditSupplierModalOpen(false);
+    showToast("פרטי הספק עודכנו", "success");
   };
 
-  // Supplier Invoices & Receipts Handlers
+  // Invoices & Emails
   const openSupplierInvoice = (supplier) => {
     setInvoiceSupplier(supplier);
     setInvoiceItems([{ bookId: '', amount: 1, price: 0 }]);
@@ -392,7 +440,7 @@ export default function PublisherApp() {
 
   const sendInvoiceEmail = () => {
     if (!invoiceSupplier || !invoiceSupplier.email) {
-      alert("לספק זה לא מוגדרת כתובת דוא״ל במערכת.");
+      showToast("לספק זה לא מוגדרת כתובת דוא״ל במערכת.", "error");
       return;
     }
     let totalOrderPrice = 0;
@@ -404,19 +452,21 @@ export default function PublisherApp() {
       return `- ${book.title} | כמות: ${item.amount} | מחיר יחידה: ₪${item.price} | סה"כ שורה: ₪${lineTotal}`;
     }).join('\n');
 
-    const subject = encodeURIComponent(`הזמנה / סיכום פרטי הפצה - ${invoiceSupplier.name}`);
-    const body = encodeURIComponent(`שלום ${invoiceSupplier.contact},\n\nלהלן סיכום הזמנת ספרים / תעודת משלוח מול ההוצאה לאור:\n\n${itemsText}\n\n--------------------------------\nסה"כ לתשלום / חיוב: ₪${totalOrderPrice.toLocaleString()}\n--------------------------------\n\nנא לאשר קבלת המייל וההזמנה.\n\nבברכה,\nהוצאה לאור.`);
-    window.location.href = `mailto:${invoiceSupplier.email}?subject=${subject}&body=${body}`;
+    const subject = `הזמנה / סיכום פרטי הפצה - ${invoiceSupplier.name}`;
+    const body = `שלום ${invoiceSupplier.contact},\n\nלהלן סיכום הזמנת ספרים / תעודת משלוח מול ההוצאה לאור:\n\n${itemsText}\n\n--------------------------------\nסה"כ לתשלום / חיוב: ₪${totalOrderPrice.toLocaleString()}\n--------------------------------\n\nנא לאשר קבלת המייל וההזמנה.\n\nבברכה,\nהוצאה לאור.`;
+    
+    sendEmailBackground(invoiceSupplier.email, subject, body);
     setIsSupplierInvoiceModalOpen(false);
   };
 
-  // PR and Campaigns Handlers
+  // Campaigns & PR
   const handleAddCampaignSubmit = async (e) => {
     e.preventDefault();
     if (db) await addDoc(getCollRef('campaigns'), newCampaign);
     else setCampaignsList([...campaignsList, { ...newCampaign, id: Date.now().toString() }]);
     setIsAddCampaignModalOpen(false);
     setNewCampaign({ name: '', book: '', budget: '', spent: '', roas: '' });
+    showToast("קמפיין שיווק חדש נוצר", "success");
   };
 
   const handleEditCampaignSubmit = async (e) => {
@@ -424,6 +474,7 @@ export default function PublisherApp() {
     if (db) await updateDoc(getDocRef('campaigns', editingCampaign.id), editingCampaign);
     else setCampaignsList(campaignsList.map(camp => camp.id === editingCampaign.id ? editingCampaign : camp));
     setIsEditCampaignModalOpen(false);
+    showToast("נתוני הקמפיין עודכנו", "success");
   };
 
   const handleAddPrSubmit = async (e) => {
@@ -432,6 +483,7 @@ export default function PublisherApp() {
     else setPrCopies([...prCopies, { ...newPr, id: Date.now().toString() }]);
     setIsAddPrModalOpen(false);
     setNewPr({ recipient: '', book: '', date: '', status: 'במשלוח' });
+    showToast("פריט יח״צ נוסף", "success");
   };
 
   const handleEditPrSubmit = async (e) => {
@@ -439,9 +491,10 @@ export default function PublisherApp() {
     if (db) await updateDoc(getDocRef('prCopies', editingPr.id), editingPr);
     else setPrCopies(prCopies.map(pr => pr.id === editingPr.id ? editingPr : pr));
     setIsEditPrModalOpen(false);
+    showToast("סטטוס יח״צ עודכן", "success");
   };
 
-  // Book Editions Handlers
+  // Books
   const handleAddEdition = (formSetter, formState) => {
     formSetter({ ...formState, editions: [...formState.editions, { name: `מהדורה ${formState.editions.length + 1}`, printRun: 0 }] });
   };
@@ -455,13 +508,13 @@ export default function PublisherApp() {
     formSetter({ ...formState, editions: updatedEditions });
   };
 
-  // Add Book Handlers
   const handleAddBook = async (e) => {
     e.preventDefault();
     if (db) await addDoc(getCollRef('inventory'), newBookForm);
     else setInventoryList([...inventoryList, { ...newBookForm, id: Date.now().toString() }]);
     setIsAddBookModalOpen(false);
     setNewBookForm(initialBookFormState);
+    showToast("ספר חדש התווסף בהצלחה למלאי", "success");
   };
 
   const handleAddBookBreakdownRow = () => setNewBookForm({ ...newBookForm, breakdown: [...newBookForm.breakdown, { supplier: '', amount: 0 }] });
@@ -472,7 +525,6 @@ export default function PublisherApp() {
   };
   const handleRemoveBookBreakdownRow = (index) => setNewBookForm({ ...newBookForm, breakdown: newBookForm.breakdown.filter((_, i) => i !== index) });
 
-  // Edit Book Handlers
   const openEditBook = (book) => {
     setEditingBook(JSON.parse(JSON.stringify(book))); 
     setIsEditBookModalOpen(true);
@@ -484,6 +536,7 @@ export default function PublisherApp() {
     else setInventoryList(inventoryList.map(b => b.id === editingBook.id ? editingBook : b));
     setIsEditBookModalOpen(false);
     setEditingBook(null);
+    showToast("פרטי הספר ומלאי המהדורות עודכנו", "success");
   };
 
   const handleEditBookBreakdownRow = () => setEditingBook({ ...editingBook, breakdown: [...editingBook.breakdown, { supplier: '', amount: 0 }] });
@@ -495,13 +548,16 @@ export default function PublisherApp() {
   const handleRemoveEditBookBreakdownRow = (index) => setEditingBook({ ...editingBook, breakdown: editingBook.breakdown.filter((_, i) => i !== index) });
 
   const handleDeleteBook = async (id) => {
-    if (window.confirm("האם אתה בטוח שברצונך למחוק ספר זה מהמלאי לצמיתות?")) {
-      if (db) await deleteDoc(getDocRef('inventory', id));
-      else setInventoryList(inventoryList.filter(book => book.id !== id));
-    }
+    setConfirmDialog({
+      message: "האם אתה בטוח שברצונך למחוק ספר זה מהמלאי לצמיתות?",
+      onConfirm: async () => {
+        if (db) await deleteDoc(getDocRef('inventory', id));
+        else setInventoryList(inventoryList.filter(book => book.id !== id));
+        showToast("הספר נמחק מהמלאי", "info");
+      }
+    });
   };
 
-  // Manual Stock Update Handler
   const handleManualStockUpdate = async (e) => {
     e.preventDefault();
     const amount = Number(stockUpdateForm.amount);
@@ -518,14 +574,15 @@ export default function PublisherApp() {
     
     setIsUpdateStockModalOpen(false);
     setStockUpdateForm({ bookId: '', amount: 0 });
+    showToast("הוספת מלאי ידנית הושלמה", "success");
   };
 
-  // Integrations
   const handleToggleIntegration = (id) => {
     if (userRole !== 'admin') return;
     setIntegrations(integrations.map(int => 
       int.id === id ? { ...int, connected: !int.connected, lastSync: !int.connected ? 'כרגע' : int.lastSync } : int
     ));
+    showToast("סטטוס חיבור לאינטגרציה עודכן", "success");
   };
 
   const handleSync = (id) => {
@@ -536,6 +593,7 @@ export default function PublisherApp() {
         int.id === id ? { ...int, lastSync: 'לפני מספר שניות' } : int
       ));
       setIsSyncing(null);
+      showToast("סנכרון נתונים למערכת חיצונית הושלם", "success");
     }, 1500);
   };
 
@@ -555,17 +613,15 @@ export default function PublisherApp() {
     book.isbn.includes(searchQuery)
   );
 
-  // Kanban Tasks Handlers
   const handleAddInvoice = async (e) => {
     e.preventDefault();
     if (!newInvoice.desc || !newInvoice.amount) return;
-    const updatedInvoices = [...selectedTask.invoices, { id: Date.now(), desc: newInvoice.desc, amount: Number(newInvoice.amount), receiptFile: null }];
-    
+    const updatedInvoices = [...(selectedTask.invoices || []), { id: Date.now(), desc: newInvoice.desc, amount: Number(newInvoice.amount), receiptFile: null }];
     if (db) await updateDoc(getDocRef('tasks', selectedTask.id), { invoices: updatedInvoices });
     else setTasksList(tasksList.map(t => t.id === selectedTask.id ? { ...t, invoices: updatedInvoices } : t));
-    
     setSelectedTask({ ...selectedTask, invoices: updatedInvoices });
     setNewInvoice({ desc: '', amount: '' });
+    showToast("שורת תמחור/הוצאה נוספה לפרויקט", "success");
   };
 
   const handleInvoiceReceiptUpload = async (invoiceId) => {
@@ -573,6 +629,7 @@ export default function PublisherApp() {
     if (db) await updateDoc(getDocRef('tasks', selectedTask.id), { invoices: updatedInvoices });
     else setTasksList(tasksList.map(t => t.id === selectedTask.id ? { ...t, invoices: updatedInvoices } : t));
     setSelectedTask({ ...selectedTask, invoices: updatedInvoices });
+    showToast("אסמכתת תשלום הועלתה בהצלחה", "success");
   };
 
   const handleFileUpload = async (type) => {
@@ -580,6 +637,7 @@ export default function PublisherApp() {
     if (db) await updateDoc(getDocRef('tasks', selectedTask.id), { [type]: fileName });
     else setTasksList(tasksList.map(t => t.id === selectedTask.id ? { ...t, [type]: fileName } : t));
     setSelectedTask({ ...selectedTask, [type]: fileName });
+    showToast("קובץ מקור התעדכן", "success");
   };
 
   const navItems = [
@@ -593,7 +651,12 @@ export default function PublisherApp() {
 
   if (!userRole) {
     return (
-      <div dir="rtl" className="flex h-screen w-full items-center justify-center bg-slate-50 font-sans p-4">
+      <div dir="rtl" className="flex h-screen w-full items-center justify-center bg-slate-50 font-sans p-4 relative">
+        {toastMessage.text && (
+          <div className={`absolute top-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg shadow-lg font-medium text-sm animate-in slide-in-from-top-4 fade-in duration-300 ${toastMessage.type === 'error' ? 'bg-red-500 text-white' : toastMessage.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>
+            {toastMessage.text}
+          </div>
+        )}
         <div className="bg-white p-6 md:p-8 rounded-2xl shadow-lg max-w-md w-full text-center border border-slate-100 animate-in fade-in zoom-in duration-300">
           <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
             <BookOpen className="text-indigo-600 w-8 h-8" />
@@ -618,8 +681,7 @@ export default function PublisherApp() {
     );
   }
 
-  // --- Dynamic Dashboard Stats Array ---
-  const currentStats = statsData[dashboardPeriod];
+  const currentStats = statsData[dashboardPeriod] || initialStatsData.monthly;
   const dashboardStatsArray = [
     { id: 1, title: 'ספרים בהפקה', value: currentStats.inProduction, icon: PenTool, color: 'text-blue-600', bgColor: 'bg-blue-100' },
     { id: 2, title: dashboardPeriod === 'monthly' ? 'ספרים שהושלמו' : 'ספרים שהושלמו (השנה)', value: currentStats.completed, icon: BookOpen, color: 'text-indigo-600', bgColor: 'bg-indigo-100' },
@@ -630,14 +692,37 @@ export default function PublisherApp() {
   ];
 
   return (
-    <div dir="rtl" className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden">
+    <div dir="rtl" className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
       
-      {/* Mobile Sidebar Overlay */}
+      {/* --- Global Toast Notifications --- */}
+      {toastMessage.text && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-lg shadow-lg font-medium text-sm flex items-center gap-2 animate-in slide-in-from-top-4 fade-in duration-300 ${toastMessage.type === 'error' ? 'bg-red-500 text-white' : toastMessage.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toastMessage.type === 'error' ? <AlertTriangle className="w-4 h-4" /> : toastMessage.type === 'warning' ? <Info className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+          {toastMessage.text}
+        </div>
+      )}
+
+      {/* --- Global Confirm Dialog --- */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 text-center">
+              <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-lg text-slate-800 mb-2">אישור פעולה</h3>
+              <p className="text-slate-600 mb-6 text-sm">{confirmDialog.message}</p>
+              <div className="flex gap-3 justify-center">
+                <button onClick={() => setConfirmDialog(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors">ביטול</button>
+                <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">אשר ומחק</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <aside className={`fixed inset-y-0 right-0 z-50 w-64 bg-white border-l border-slate-200 flex flex-col shadow-2xl transform transition-transform duration-300 md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} print:hidden`}>
         <div className="p-4 md:p-6 flex items-center justify-between border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -660,9 +745,7 @@ export default function PublisherApp() {
         </nav>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Header */}
         <header className="bg-white p-3 md:p-6 shadow-sm border-b border-slate-200 flex justify-between items-center z-10 print:hidden">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden text-slate-500 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition-colors"><Menu className="w-6 h-6" /></button>
@@ -670,22 +753,16 @@ export default function PublisherApp() {
           </div>
           <div className="flex items-center gap-2 md:gap-4">
             <div className="hidden md:block text-sm text-slate-500">שלום, <span className="font-semibold text-slate-700">{currentUserName}</span></div>
-            
             {userRole === 'admin' && (
-              <button 
-                onClick={() => setIsUserManageModalOpen(true)} 
-                className="text-xs md:text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1.5 md:px-3 md:py-1.5 rounded-lg transition-colors border border-transparent flex items-center gap-1.5"
-              >
+              <button onClick={() => setIsUserManageModalOpen(true)} className="text-xs md:text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1.5 md:px-3 md:py-1.5 rounded-lg transition-colors border border-transparent flex items-center gap-1.5">
                 <UserCog className="w-4 h-4" /> ניהול משתמשים
               </button>
             )}
-
             <button onClick={() => { setUserRole(null); setCurrentUserName(''); setUsername(''); setPassword(''); setLoginError(''); }} className="text-xs md:text-sm font-medium text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1.5 md:px-3 md:py-1.5 rounded-lg transition-colors border border-transparent">התנתק</button>
             <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-bold text-sm md:text-base ${userRole === 'admin' ? 'bg-indigo-100 border-2 border-indigo-200 text-indigo-700' : 'bg-slate-100 border-2 border-slate-200 text-slate-600'}`}>{userRole === 'admin' ? 'מ' : 'צ'}</div>
           </div>
         </header>
 
-        {/* Dynamic Content */}
         <div className="flex-1 p-3 md:p-8 overflow-y-auto w-full max-w-full">
           
           {/* DASHBOARD VIEW */}
@@ -780,20 +857,20 @@ export default function PublisherApp() {
                             </div>
                           </td>
                           <td className="py-4 px-4 text-center bg-indigo-50/30">
-                    <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
-                    <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex flex-col gap-1.5 min-w-[180px]">
-                      {book.breakdown && book.breakdown.length > 0 ? book.breakdown.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-xs md:text-sm border-b border-slate-100/50 pb-1 last:border-0 last:pb-0 gap-2">
-                          <span className="text-slate-500 truncate">{item.supplier}</span>
-                          <span className="font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded text-xs">{item.amount.toLocaleString()}</span>
-                        </div>
-                      )) : <span className="text-xs text-slate-400">לא משויך לספקים</span>}
-                    </div>
-                  </td>
-                  <td className="py-4 px-4 text-center bg-emerald-50/30">
+                            <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
+                            <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="flex flex-col gap-1.5 min-w-[180px]">
+                              {book.breakdown && book.breakdown.length > 0 ? book.breakdown.map((item, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-xs md:text-sm border-b border-slate-100/50 pb-1 last:border-0 last:pb-0 gap-2">
+                                  <span className="text-slate-500 truncate">{item.supplier}</span>
+                                  <span className="font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded text-xs">{item.amount.toLocaleString()}</span>
+                                </div>
+                              )) : <span className="text-xs text-slate-400">לא משויך לספקים</span>}
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-center bg-emerald-50/30">
                             <div className="font-bold text-emerald-700 text-xl md:text-2xl">{totalAvailableStock.toLocaleString()}</div>
                           </td>
                           <td className="py-4 px-4 text-center">
@@ -883,37 +960,22 @@ export default function PublisherApp() {
                         <h3 className="font-bold text-slate-700">{col.title}</h3>
                       </div>
                       <div className="flex-1 space-y-3">
-                {tasks[col.id]?.map((task) => {
-                  const totalExpenses = task.invoices ? task.invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0) : 0;
-                  const filesCount = (task.coverFile ? 1 : 0) + (task.bookFile ? 1 : 0) + (task.dedicationFile ? 1 : 0);
-                  
-                  return (
-                            <div 
-                              key={task.id} 
-                              onClick={() => setSelectedTask(task)}
-                              className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all hover:border-indigo-200 cursor-pointer group"
-                            >
+                        {tasks[col.id]?.map((task) => {
+                          const totalExpenses = task.invoices ? task.invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0) : 0;
+                          const filesCount = (task.coverFile ? 1 : 0) + (task.bookFile ? 1 : 0) + (task.dedicationFile ? 1 : 0);
+                          
+                          return (
+                            <div key={task.id} onClick={() => setSelectedTask(task)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all hover:border-indigo-200 cursor-pointer group">
                               <h4 className="font-bold text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">{task.title}</h4>
                               <p className="text-sm text-slate-500 mb-3">מאת: {task.author}</p>
                               
                               <div className="flex flex-wrap gap-2 mb-3">
-                                {filesCount > 0 && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-md">
-                                    <Paperclip className="w-3 h-3" />
-                                    {filesCount} קבצים
-                                  </span>
-                                )}
-                                {totalExpenses > 0 && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md">
-                                    <DollarSign className="w-3 h-3" />
-                                    ₪{totalExpenses.toLocaleString()} הוצאות
-                                  </span>
-                                )}
+                                {filesCount > 0 && <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-md"><Paperclip className="w-3 h-3" />{filesCount} קבצים</span>}
+                                {totalExpenses > 0 && <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md"><DollarSign className="w-3 h-3" />₪{totalExpenses.toLocaleString()} הוצאות</span>}
                               </div>
 
                               <div className="flex justify-between items-center text-xs text-slate-400 mt-2 pt-3 border-t border-slate-50">
-                                <span>יעד סיום:</span>
-                                <span className="bg-slate-50 px-2 py-1 rounded-md text-slate-600">{task.date}</span>
+                                <span>יעד סיום:</span><span className="bg-slate-50 px-2 py-1 rounded-md text-slate-600">{task.date}</span>
                               </div>
                             </div>
                           );
@@ -929,15 +991,10 @@ export default function PublisherApp() {
           {/* MARKETING AND PR VIEW */}
           {activeTab === 'marketing' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 animate-in fade-in duration-300 w-full">
-              {/* Marketing Campaigns */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col w-full overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="text-base md:text-lg font-bold flex items-center gap-2"><Megaphone className="w-5 h-5 text-indigo-600" /> קמפיינים</h3>
-                  {userRole === 'admin' && (
-                    <button onClick={() => setIsAddCampaignModalOpen(true)} className="text-xs md:text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                      <Plus className="w-4 h-4" /> הוסף
-                    </button>
-                  )}
+                  {userRole === 'admin' && <button onClick={() => setIsAddCampaignModalOpen(true)} className="text-xs md:text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-4 h-4" /> הוסף</button>}
                 </div>
                 <div className="p-4 md:p-6 space-y-5 md:space-y-6">
                   {campaignsList.map(camp => (
@@ -945,15 +1002,10 @@ export default function PublisherApp() {
                        <div className="flex justify-between items-center gap-2">
                            <div className="font-bold text-xs md:text-sm text-slate-700 truncate pr-6">{camp.name}</div>
                            <div className="text-[10px] md:text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 md:py-1 rounded shrink-0">החזר: {camp.roas}</div>
-                           {userRole === 'admin' && (
-                             <button onClick={() => { setEditingCampaign(camp); setIsEditCampaignModalOpen(true); }} className="absolute right-0 top-0 p-1 text-slate-300 hover:text-indigo-600 bg-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
-                               <Edit className="w-4 h-4" />
-                             </button>
-                           )}
+                           {userRole === 'admin' && <button onClick={() => { setEditingCampaign(camp); setIsEditCampaignModalOpen(true); }} className="absolute right-0 top-0 p-1 text-slate-300 hover:text-indigo-600 bg-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"><Edit className="w-4 h-4" /></button>}
                        </div>
                        <div className="flex justify-between text-[10px] md:text-xs text-slate-500">
-                           <span>נוצל: ₪{Number(camp.spent).toLocaleString()}</span>
-                           <span>מתוך ₪{Number(camp.budget).toLocaleString()}</span>
+                           <span>נוצל: ₪{Number(camp.spent).toLocaleString()}</span><span>מתוך ₪{Number(camp.budget).toLocaleString()}</span>
                        </div>
                        <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2"><div className="bg-indigo-500 h-1.5 md:h-2 rounded-full" style={{ width: `${(Number(camp.spent)/Number(camp.budget))*100}%`}}></div></div>
                     </div>
@@ -961,15 +1013,10 @@ export default function PublisherApp() {
                 </div>
               </div>
 
-              {/* PR & Review Copies */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col w-full overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2"><Share2 className="w-5 h-5 text-pink-500" /> עותקי סיקור ויח"צ</h3>
-                  {userRole === 'admin' && (
-                    <button onClick={() => setIsAddPrModalOpen(true)} className="text-xs md:text-sm font-medium text-pink-600 hover:text-pink-700 bg-pink-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                      <Plus className="w-4 h-4" /> חדש
-                    </button>
-                  )}
+                  {userRole === 'admin' && <button onClick={() => setIsAddPrModalOpen(true)} className="text-xs md:text-sm font-medium text-pink-600 hover:text-pink-700 bg-pink-50 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-4 h-4" /> חדש</button>}
                 </div>
                 <div className="p-0 flex-1 overflow-x-auto w-full">
                   <table className="w-full text-right text-sm min-w-[350px]">
@@ -1003,7 +1050,6 @@ export default function PublisherApp() {
             </div>
           )}
 
-          {/* INTEGRATIONS AND AUTOMATION VIEW */}
           {activeTab === 'integrations' && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="flex justify-between items-center">
@@ -1017,41 +1063,19 @@ export default function PublisherApp() {
                 {integrations.map((int) => (
                   <div key={int.id} className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-slate-100 hover:shadow-md transition-all">
                     <div className="flex justify-between items-start mb-4">
-                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-800 text-white flex items-center justify-center text-lg md:text-xl font-bold">
-                        {int.logo}
-                      </div>
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-800 text-white flex items-center justify-center text-lg md:text-xl font-bold">{int.logo}</div>
                       <div className="flex flex-col items-end gap-1.5">
-                        <button 
-                          onClick={() => handleToggleIntegration(int.id)}
-                          disabled={userRole !== 'admin'}
-                          className={`w-10 md:w-12 h-5 md:h-6 rounded-full transition-colors relative focus:outline-none ${int.connected ? 'bg-emerald-500' : 'bg-slate-300'} ${userRole !== 'admin' && 'opacity-70 cursor-not-allowed'}`}
-                        >
+                        <button onClick={() => handleToggleIntegration(int.id)} disabled={userRole !== 'admin'} className={`w-10 md:w-12 h-5 md:h-6 rounded-full transition-colors relative focus:outline-none ${int.connected ? 'bg-emerald-500' : 'bg-slate-300'} ${userRole !== 'admin' && 'opacity-70 cursor-not-allowed'}`}>
                           <span className={`absolute top-0.5 md:top-1 bg-white w-4 h-4 rounded-full transition-all shadow-sm ${int.connected ? 'left-1' : 'right-1'}`} />
                         </button>
-                        <span className={`text-[10px] md:text-xs font-medium ${int.connected ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          {int.connected ? 'מחובר' : 'מנותק'}
-                        </span>
+                        <span className={`text-[10px] md:text-xs font-medium ${int.connected ? 'text-emerald-600' : 'text-slate-400'}`}>{int.connected ? 'מחובר' : 'מנותק'}</span>
                       </div>
                     </div>
-                    
                     <h4 className="text-base md:text-lg font-bold text-slate-800">{int.name}</h4>
                     <p className="text-xs md:text-sm text-slate-500 mb-6">{int.type}</p>
-                    
                     <div className="flex justify-between items-center pt-4 border-t border-slate-100">
-                      <div className="text-[10px] md:text-xs text-slate-400">
-                        סנכרון אחרון:<br/><span className="text-slate-600 font-medium">{int.lastSync}</span>
-                      </div>
-                      <button 
-                        onClick={() => handleSync(int.id)}
-                        disabled={!int.connected || isSyncing === int.id || userRole !== 'admin'}
-                        className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors ${
-                          !int.connected || userRole !== 'admin' ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : 
-                          'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                        }`}
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 ${isSyncing === int.id ? 'animate-spin' : ''}`} />
-                        סנכרן
-                      </button>
+                      <div className="text-[10px] md:text-xs text-slate-400">סנכרון אחרון:<br/><span className="text-slate-600 font-medium">{int.lastSync}</span></div>
+                      <button onClick={() => handleSync(int.id)} disabled={!int.connected || isSyncing === int.id || userRole !== 'admin'} className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors ${!int.connected || userRole !== 'admin' ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}><RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 ${isSyncing === int.id ? 'animate-spin' : ''}`} /> סנכרן</button>
                     </div>
                   </div>
                 ))}
@@ -1063,8 +1087,6 @@ export default function PublisherApp() {
       </main>
 
       {/* --- MODALS --- */}
-      
-      {/* User Management Modal (Admin Only) */}
       {isUserManageModalOpen && userRole === 'admin' && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
@@ -1075,20 +1097,14 @@ export default function PublisherApp() {
             
             <div className="p-4 md:p-6 overflow-y-auto flex-1 flex flex-col lg:flex-row gap-6">
               
-              {/* Existing Users List */}
               <div className="flex-1">
                 <h4 className="font-bold text-sm text-slate-700 mb-3 border-b border-slate-100 pb-2">משתמשים פעילים</h4>
                 <div className="space-y-2">
                   {usersList.map((u, idx) => (
                     <div key={idx} className="bg-slate-50 border border-slate-100 p-3 rounded-lg flex justify-between items-center">
-                      <div>
-                        <div className="font-bold text-sm text-slate-800">{u.name}</div>
-                        <div className="text-xs text-slate-500 font-mono">@{u.username}</div>
-                      </div>
+                      <div><div className="font-bold text-sm text-slate-800">{u.name}</div><div className="text-xs text-slate-500 font-mono">@{u.username}</div></div>
                       <div className="flex items-center gap-3">
-                        <span className={`text-[10px] px-2 py-1 rounded font-medium ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
-                          {u.role === 'admin' ? 'מנהל' : 'צופה'}
-                        </span>
+                        <span className={`text-[10px] px-2 py-1 rounded font-medium ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>{u.role === 'admin' ? 'מנהל' : 'צופה'}</span>
                         <button onClick={() => handleRemoveUser(u.username)} className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
@@ -1096,7 +1112,6 @@ export default function PublisherApp() {
                 </div>
               </div>
 
-              {/* Add New User Form */}
               <div className="flex-1 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                 <h4 className="font-bold text-sm text-indigo-900 mb-3 flex items-center gap-2"><UserPlus className="w-4 h-4" /> יצירת משתמש חדש</h4>
                 <form onSubmit={handleCreateUser} className="space-y-3">
@@ -1122,7 +1137,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Supplier Order/Invoice Modal */}
       {isSupplierInvoiceModalOpen && invoiceSupplier && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
@@ -1143,23 +1157,17 @@ export default function PublisherApp() {
               <div className="space-y-3 mb-6">
                 {invoiceItems.map((item, idx) => (
                   <div key={idx} className="flex flex-wrap md:flex-nowrap gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                    <select 
-                      value={item.bookId} 
-                      onChange={(e) => handleInvoiceItemChange(idx, 'bookId', e.target.value)}
-                      className="w-full md:flex-1 p-2 border border-slate-200 rounded-lg text-sm bg-white outline-none"
-                    >
+                    <select value={item.bookId} onChange={(e) => handleInvoiceItemChange(idx, 'bookId', e.target.value)} className="w-full md:flex-1 p-2 border border-slate-200 rounded-lg text-sm bg-white outline-none">
                       <option value="" disabled>-- בחר ספר --</option>
                       {inventoryList.map(book => <option key={book.id} value={book.id}>{book.title}</option>)}
                     </select>
                     
                     <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
                       <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] md:text-xs text-slate-500">כמות:</label>
-                        <input type="number" min="1" value={item.amount} onChange={(e) => handleInvoiceItemChange(idx, 'amount', e.target.value)} className="w-16 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white" dir="ltr" />
+                        <label className="text-[10px] md:text-xs text-slate-500">כמות:</label><input type="number" min="1" value={item.amount} onChange={(e) => handleInvoiceItemChange(idx, 'amount', e.target.value)} className="w-16 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white" dir="ltr" />
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] md:text-xs text-slate-500">מחיר ליח' (₪):</label>
-                        <input type="number" min="0" value={item.price} onChange={(e) => handleInvoiceItemChange(idx, 'price', e.target.value)} className="w-20 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white text-indigo-600 font-bold" dir="ltr" />
+                        <label className="text-[10px] md:text-xs text-slate-500">מחיר (₪):</label><input type="number" min="0" value={item.price} onChange={(e) => handleInvoiceItemChange(idx, 'price', e.target.value)} className="w-20 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white text-indigo-600 font-bold" dir="ltr" />
                       </div>
                       <button type="button" onClick={() => removeInvoiceItemRow(idx)} className="text-slate-400 hover:text-red-500 p-1.5 bg-white rounded border border-slate-200"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -1175,7 +1183,7 @@ export default function PublisherApp() {
 
               <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
                 <h4 className="font-bold text-sm text-blue-900 mb-2">שליחה לספק</h4>
-                <p className="text-xs text-slate-600 mb-3">הודעת דוא״ל המכילה את פירוט ההזמנה המלא תיווצר ותישלח לכתובת <strong>{invoiceSupplier.email}</strong>.</p>
+                <p className="text-xs text-slate-600 mb-3">הודעת דוא״ל תשלח אוטומטית ברקע לכתובת <strong>{invoiceSupplier.email}</strong>.</p>
                 <button onClick={sendInvoiceEmail} disabled={invoiceItems.length === 0 || !invoiceItems[0].bookId} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed py-3 rounded-xl font-medium flex justify-center items-center gap-2 transition-colors">
                   <Send className="w-4 h-4" /> צור ושלח פירוט הזמנה למייל
                 </button>
@@ -1185,7 +1193,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Edit Dashboard Stats Modal */}
       {isEditStatsModalOpen && editingStats && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
@@ -1210,7 +1217,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Add New Supplier Modal */}
       {isAddSupplierModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
@@ -1233,7 +1239,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Edit Supplier Modal */}
       {isEditSupplierModalOpen && editingSupplier && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
@@ -1256,7 +1261,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Add New Marketing Campaign Modal */}
       {isAddCampaignModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
@@ -1280,7 +1284,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Edit Marketing Campaign Modal */}
       {isEditCampaignModalOpen && editingCampaign && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
@@ -1304,7 +1307,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Add PR Copy Modal */}
       {isAddPrModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
@@ -1329,7 +1331,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Edit PR Copy Modal */}
       {isEditPrModalOpen && editingPr && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
@@ -1354,7 +1355,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Add New Book Modal */}
       {isAddBookModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] md:max-h-[90vh]" dir="rtl">
@@ -1560,29 +1560,14 @@ export default function PublisherApp() {
               <form onSubmit={handleManualStockUpdate} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">בחר ספר (מעדכן את מחסן ההוצאה)</label>
-                  <select 
-                    required 
-                    value={stockUpdateForm.bookId} 
-                    onChange={e => setStockUpdateForm({...stockUpdateForm, bookId: e.target.value})}
-                    className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 text-sm"
-                  >
+                  <select required value={stockUpdateForm.bookId} onChange={e => setStockUpdateForm({...stockUpdateForm, bookId: e.target.value})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 text-sm">
                     <option value="" disabled>-- בחר מספרייה --</option>
-                    {inventoryList.map(book => (
-                      <option key={book.id} value={book.id}>{book.title} (במחסן ההוצאה: {book.publisherStock})</option>
-                    ))}
+                    {inventoryList.map(book => <option key={book.id} value={book.id}>{book.title} (במחסן ההוצאה: {book.publisherStock})</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">כמות לעדכון</label>
-                  <input 
-                    required 
-                    type="number" 
-                    value={stockUpdateForm.amount} 
-                    onChange={e => setStockUpdateForm({...stockUpdateForm, amount: e.target.value})}
-                    className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-                    placeholder="למשל: 50 או -20"
-                    dir="ltr"
-                  />
+                  <input required type="number" value={stockUpdateForm.amount} onChange={e => setStockUpdateForm({...stockUpdateForm, amount: e.target.value})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" placeholder="למשל: 50 או -20" dir="ltr" />
                   <p className="text-xs text-slate-400 mt-1">הזן מספר חיובי להוספה למלאי, או שלילי להחסרה מ"מחסן ההוצאה".</p>
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-medium mt-2 md:mt-4">
@@ -1675,58 +1660,58 @@ export default function PublisherApp() {
               </section>
 
               {/* Invoices Section */}
-      <section>
-        <div className="flex justify-between items-end mb-4">
-          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-indigo-600" />
-            מעקב הוצאות וחשבוניות (תמחור)
-          </h3>
-          <div className="text-sm font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">
-            סה"כ: ₪{(selectedTask.invoices || []).reduce((s, i) => s + (i.amount || 0), 0).toLocaleString()}
-          </div>
-        </div>
-        
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
-          <table className="w-full text-right text-sm">
-            <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
-              <tr>
-                <th className="py-2.5 px-4 font-medium">תיאור הוצאה</th>
-                <th className="py-2.5 px-4 font-medium">סכום</th>
-                <th className="py-2.5 px-4 font-medium text-center">אסמכתא</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(selectedTask.invoices || []).map(inv => (
-                <tr key={inv.id}>
-                  <td className="py-3 px-4 font-medium text-slate-700">{inv.desc}</td>
-                  <td className="py-3 px-4 text-slate-600">₪{inv.amount.toLocaleString()}</td>
-                  <td className="py-3 px-4 text-center">
-                    {inv.receiptFile ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                        <CheckCircle className="w-3 h-3" /> הועלה
-                      </span>
-                    ) : (
-                      userRole === 'admin' ? (
-                        <button onClick={() => handleInvoiceReceiptUpload(inv.id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center justify-center gap-1 mx-auto">
-                          <Upload className="w-3 h-3" /> צרף קבלה
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">חסר</span>
-                      )
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {(!selectedTask.invoices || selectedTask.invoices.length === 0) && (
-                <tr>
-                  <td colSpan="3" className="py-6 text-center text-slate-400">אין הוצאות רשומות לספר זה.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              <section>
+                <div className="flex justify-between items-end mb-4">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-indigo-600" />
+                    מעקב הוצאות וחשבוניות (תמחור)
+                  </h3>
+                  <div className="text-sm font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">
+                    סה"כ: ₪{(selectedTask.invoices || []).reduce((s, i) => s + (i.amount || 0), 0).toLocaleString()}
+                  </div>
+                </div>
+                
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
+                  <table className="w-full text-right text-sm">
+                    <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-4 font-medium">תיאור הוצאה</th>
+                        <th className="py-2.5 px-4 font-medium">סכום</th>
+                        <th className="py-2.5 px-4 font-medium text-center">אסמכתא</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(selectedTask.invoices || []).map(inv => (
+                        <tr key={inv.id}>
+                          <td className="py-3 px-4 font-medium text-slate-700">{inv.desc}</td>
+                          <td className="py-3 px-4 text-slate-600">₪{inv.amount.toLocaleString()}</td>
+                          <td className="py-3 px-4 text-center">
+                            {inv.receiptFile ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                                <CheckCircle className="w-3 h-3" /> הועלה
+                              </span>
+                            ) : (
+                              userRole === 'admin' ? (
+                                <button onClick={() => handleInvoiceReceiptUpload(inv.id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center justify-center gap-1 mx-auto">
+                                  <Upload className="w-3 h-3" /> צרף קבלה
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-400">חסר</span>
+                              )
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {(!selectedTask.invoices || selectedTask.invoices.length === 0) && (
+                        <tr>
+                          <td colSpan="3" className="py-6 text-center text-slate-400">אין הוצאות רשומות לספר זה.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-        {userRole === 'admin' && (
+                {userRole === 'admin' && (
                   <form onSubmit={handleAddInvoice} className="flex gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <input 
                       required type="text" placeholder="תיאור (למשל: עריכה לשונית)" 
