@@ -212,6 +212,15 @@ export default function PublisherApp() {
   const [integrations, setIntegrations] = useState(initialIntegrations);
   const [isSyncing, setIsSyncing] = useState(null);
 
+  // בדיקה אוטומטית אם המשתמש הגיע דרך קישור במייל (עם פרמטר user=)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const userParam = params.get('user');
+    if (userParam) {
+      setUsername(userParam);
+    }
+  }, []);
+
   // --- Background Email Sender ---
   const sendEmailBackground = async (toEmail, subject, body) => {
     if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_PUBLIC_KEY) {
@@ -322,11 +331,17 @@ export default function PublisherApp() {
   // --- Handlers ---
   const handleLogin = (e) => {
     e.preventDefault();
-    const user = usersList.find(u => u.username === username && u.password === password);
+    
+    // חותך רווחים מיותרים שהמשתמש אולי הדביק בטעות מהמייל
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    const user = usersList.find(u => u.username === cleanUsername && u.password === cleanPassword);
     
     if (user) {
       setUserRole(user.role);
       setCurrentUserName(user.name);
+      setUsername(cleanUsername); // Update state to clean version
       setLoginError('');
       showToast(`ברוך הבא, ${user.name}`);
     } else {
@@ -346,7 +361,11 @@ export default function PublisherApp() {
     if (!newUser.username || !newUser.password || !newUser.name) return;
     
     const userObj = {
-      username: newUser.username, password: newUser.password, role: newUser.role, name: newUser.name, email: newUser.email || ''
+      username: newUser.username.trim(), 
+      password: newUser.password.trim(), 
+      role: newUser.role, 
+      name: newUser.name, 
+      email: newUser.email ? newUser.email.trim() : ''
     };
 
     if (db) {
@@ -357,8 +376,10 @@ export default function PublisherApp() {
 
     if (newUser.email) {
       const subject = "פרטי התחברות למערכת ניהול הוצאה לאור";
-      const appUrl = window.location.origin; // השגת הקישור האוטומטי לאפליקציה
-      const body = `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת הניהול.\n\nשם משתמש: ${newUser.username}\nסיסמה: ${newUser.password}\n\nקישור כניסה למערכת:\n${appUrl}\n\nבברכה,\nצוות המערכת`;
+      // יוצר קישור חכם שמכיל את השם משתמש, כדי שיוקלד אוטומטית בכניסה
+      const appUrl = `${window.location.origin}?user=${userObj.username}`; 
+      
+      const body = `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת הניהול.\n\nשם משתמש: ${userObj.username}\nסיסמה: ${userObj.password}\n\nלכניסה למערכת לחץ על הקישור הבא (שם המשתמש כבר יוזן עבורך):\n${appUrl}\n\nבברכה,\nצוות המערכת`;
       
       showToast("מקים משתמש ושולח מייל ברקע...", "info");
       sendEmailBackground(newUser.email, subject, body);
@@ -704,7 +725,7 @@ export default function PublisherApp() {
     return (
       <div dir="rtl" className="flex h-screen w-full items-center justify-center bg-slate-50 font-sans p-4 relative">
         {toastMessage.text && (
-          <div className={`absolute top-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg shadow-lg font-medium text-sm animate-in slide-in-from-top-4 fade-in duration-300 ${toastMessage.type === 'error' ? 'bg-red-500 text-white' : toastMessage.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>
+          <div className={`absolute top-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-lg shadow-lg font-medium text-sm animate-in slide-in-from-top-4 fade-in duration-300 ${toastMessage.type === 'error' ? 'bg-red-500 text-white' : toastMessage.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>
             {toastMessage.text}
           </div>
         )}
@@ -1697,76 +1718,33 @@ export default function PublisherApp() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8">
-              
               <section>
-                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <Paperclip className="w-5 h-5 text-indigo-600" />
-                  קבצי מקור
-                </h3>
+                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Paperclip className="w-5 h-5 text-indigo-600" /> קבצי מקור</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                  
                   <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
-                    <div className={`p-3 rounded-full ${selectedTask.coverFile ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                      <ImageIcon className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-slate-700">עיצוב כריכה</p>
-                      {selectedTask.coverFile ? 
-                        <p className="text-xs text-emerald-600 mt-1 font-mono">{selectedTask.coverFile}</p> : 
-                        <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}
-                    </div>
-                    {userRole === 'admin' && (
-                      <button onClick={() => handleFileUpload('coverFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center">
-                        <Upload className="w-3 h-3" /> {selectedTask.coverFile ? 'החלף קובץ' : 'העלה קובץ'}
-                      </button>
-                    )}
+                    <div className={`p-3 rounded-full ${selectedTask.coverFile ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}><ImageIcon className="w-6 h-6" /></div>
+                    <div><p className="font-medium text-sm text-slate-700">עיצוב כריכה</p>{selectedTask.coverFile ? <p className="text-xs text-emerald-600 mt-1 font-mono">{selectedTask.coverFile}</p> : <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}</div>
+                    {userRole === 'admin' && <button onClick={() => handleFileUpload('coverFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center"><Upload className="w-3 h-3" /> {selectedTask.coverFile ? 'החלף קובץ' : 'העלה קובץ'}</button>}
                   </div>
 
                   <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
-                    <div className={`p-3 rounded-full ${selectedTask.bookFile ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
-                      <FileText className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-slate-700">קובץ הספר (פנים)</p>
-                      {selectedTask.bookFile ? 
-                        <p className="text-xs text-blue-600 mt-1 font-mono">{selectedTask.bookFile}</p> : 
-                        <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}
-                    </div>
-                    {userRole === 'admin' && (
-                      <button onClick={() => handleFileUpload('bookFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center">
-                        <Upload className="w-3 h-3" /> {selectedTask.bookFile ? 'החלף קובץ' : 'העלה קובץ'}
-                      </button>
-                    )}
+                    <div className={`p-3 rounded-full ${selectedTask.bookFile ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}><FileText className="w-6 h-6" /></div>
+                    <div><p className="font-medium text-sm text-slate-700">קובץ הספר (פנים)</p>{selectedTask.bookFile ? <p className="text-xs text-blue-600 mt-1 font-mono">{selectedTask.bookFile}</p> : <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}</div>
+                    {userRole === 'admin' && <button onClick={() => handleFileUpload('bookFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center"><Upload className="w-3 h-3" /> {selectedTask.bookFile ? 'החלף קובץ' : 'העלה קובץ'}</button>}
                   </div>
 
                   <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
-                    <div className={`p-3 rounded-full ${selectedTask.dedicationFile ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}>
-                      <Users className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-slate-700">רשימת הקדשות</p>
-                      {selectedTask.dedicationFile ? 
-                        <p className="text-xs text-purple-600 mt-1 font-mono">{selectedTask.dedicationFile}</p> : 
-                        <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}
-                    </div>
-                    {userRole === 'admin' && (
-                      <button onClick={() => handleFileUpload('dedicationFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center">
-                        <Upload className="w-3 h-3" /> {selectedTask.dedicationFile ? 'החלף קובץ' : 'העלה קובץ'}
-                      </button>
-                    )}
+                    <div className={`p-3 rounded-full ${selectedTask.dedicationFile ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Users className="w-6 h-6" /></div>
+                    <div><p className="font-medium text-sm text-slate-700">רשימת הקדשות</p>{selectedTask.dedicationFile ? <p className="text-xs text-purple-600 mt-1 font-mono">{selectedTask.dedicationFile}</p> : <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}</div>
+                    {userRole === 'admin' && <button onClick={() => handleFileUpload('dedicationFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center"><Upload className="w-3 h-3" /> {selectedTask.dedicationFile ? 'החלף קובץ' : 'העלה קובץ'}</button>}
                   </div>
                 </div>
               </section>
 
               <section>
                 <div className="flex justify-between items-end mb-4">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-indigo-600" />
-                    מעקב הוצאות וחשבוניות (תמחור)
-                  </h3>
-                  <div className="text-sm font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">
-                    סה"כ: ₪{(selectedTask.invoices || []).reduce((s, i) => s + (i.amount || 0), 0).toLocaleString()}
-                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Receipt className="w-5 h-5 text-indigo-600" /> מעקב הוצאות וחשבוניות (תמחור)</h3>
+                  <div className="text-sm font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">סה"כ: ₪{(selectedTask.invoices || []).reduce((s, i) => s + (i.amount || 0), 0).toLocaleString()}</div>
                 </div>
                 
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
@@ -1784,26 +1762,12 @@ export default function PublisherApp() {
                           <td className="py-3 px-4 font-medium text-slate-700">{inv.desc}</td>
                           <td className="py-3 px-4 text-slate-600">₪{inv.amount.toLocaleString()}</td>
                           <td className="py-3 px-4 text-center">
-                            {inv.receiptFile ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                                <CheckCircle className="w-3 h-3" /> הועלה
-                              </span>
-                            ) : (
-                              userRole === 'admin' ? (
-                                <button onClick={() => handleInvoiceReceiptUpload(inv.id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center justify-center gap-1 mx-auto">
-                                  <Upload className="w-3 h-3" /> צרף קבלה
-                                </button>
-                              ) : (
-                                <span className="text-xs text-slate-400">חסר</span>
-                              )
-                            )}
+                            {inv.receiptFile ? <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md"><CheckCircle className="w-3 h-3" /> הועלה</span> : userRole === 'admin' ? <button onClick={() => handleInvoiceReceiptUpload(inv.id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center justify-center gap-1 mx-auto"><Upload className="w-3 h-3" /> צרף קבלה</button> : <span className="text-xs text-slate-400">חסר</span>}
                           </td>
                         </tr>
                       ))}
                       {(!selectedTask.invoices || selectedTask.invoices.length === 0) && (
-                        <tr>
-                          <td colSpan="3" className="py-6 text-center text-slate-400">אין הוצאות רשומות לספר זה.</td>
-                        </tr>
+                        <tr><td colSpan="3" className="py-6 text-center text-slate-400">אין הוצאות רשומות לספר זה.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -1811,19 +1775,9 @@ export default function PublisherApp() {
 
                 {userRole === 'admin' && (
                   <form onSubmit={handleAddInvoice} className="flex gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <input 
-                      required type="text" placeholder="תיאור (למשל: עריכה לשונית)" 
-                      value={newInvoice.desc} onChange={e => setNewInvoice({...newInvoice, desc: e.target.value})}
-                      className="flex-1 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
-                    />
-                    <input 
-                      required type="number" placeholder="סכום (₪)" 
-                      value={newInvoice.amount} onChange={e => setNewInvoice({...newInvoice, amount: e.target.value})}
-                      className="w-28 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
-                    />
-                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors">
-                      הוסף
-                    </button>
+                    <input required type="text" placeholder="תיאור (למשל: עריכה לשונית)" value={newInvoice.desc} onChange={e => setNewInvoice({...newInvoice, desc: e.target.value})} className="flex-1 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+                    <input required type="number" placeholder="סכום (₪)" value={newInvoice.amount} onChange={e => setNewInvoice({...newInvoice, amount: e.target.value})} className="w-28 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors">הוסף</button>
                   </form>
                 )}
               </section>
