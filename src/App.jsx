@@ -1,43 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, 
-  KanbanSquare, 
-  Package, 
-  BookOpen, 
-  AlertTriangle, 
-  CheckCircle, 
-  TrendingUp,
-  FileText,
-  PenTool,
-  Printer,
-  Truck,
-  Store,
-  Users,
-  Search,
-  X,
-  Image as ImageIcon,
-  Upload,
-  Receipt,
-  Plus,
-  DollarSign,
-  Paperclip,
-  Mail,
-  Megaphone,
-  Settings,
-  RefreshCw,
-  Share2,
-  Download,
-  Edit,
-  Phone,
-  Menu,
-  Trash2,
-  Settings2,
-  UserPlus,
-  Send,
-  UserCog
+  LayoutDashboard, KanbanSquare, Package, BookOpen, AlertTriangle, CheckCircle, 
+  TrendingUp, FileText, PenTool, Printer, Truck, Store, Users, Search, X, 
+  Image as ImageIcon, Upload, Receipt, Plus, DollarSign, Paperclip, Mail, 
+  Megaphone, Settings, RefreshCw, Share2, Download, Edit, Phone, Menu, Trash2, 
+  Settings2, UserPlus, Send, UserCog
 } from 'lucide-react';
 
-// --- Mock Data ---
+// --- Firebase Imports ---
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+
+// --- Firebase Initialization ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
+const auth = app ? getAuth(app) : null;
+let db = app ? getFirestore(app) : null;
+const appId = typeof __app_id !== 'undefined' ? __app_id.replace(/\//g, '_') : 'default-publisher-app';
+
+const getCollRef = (collName) => collection(db, 'artifacts', appId, 'public', 'data', collName);
+const getDocRef = (collName, docId) => doc(db, 'artifacts', appId, 'public', 'data', collName, docId);
+
+// --- Mock / Initial Data (Used for First-time Seeding) ---
 const initialStatsData = {
   monthly: { inProduction: '12', completed: '145', sold: '3,240', revenue: '142,500', trend: '+18.5%', alerts: '3' },
   yearly: { inProduction: '12', completed: '34', sold: '38,500', revenue: '1,750,000', trend: '+42.3%', alerts: '3' }
@@ -48,23 +33,19 @@ const kanbanColumns = [
   { id: 'published', title: 'ספרים שיצאו', icon: BookOpen, color: 'border-emerald-200 bg-emerald-50' }
 ];
 
-const initialKanbanTasks = {
-  in_progress: [
-    { id: 101, title: 'מסע אל הלא נודע', author: 'יעל כהן', date: '15/10/2026', coverFile: null, bookFile: 'טיוטה_ראשונית.docx', dedicationFile: null, invoices: [{ id: 1, desc: 'קריאת לקטורה', amount: 450, receiptFile: null }] },
-    { id: 103, title: 'סודות המטבח האיטלקי', author: 'מיכל אהרוני', date: '01/11/2026', coverFile: null, bookFile: 'מטבח_איטלקי_עריכה.pdf', dedicationFile: null, invoices: [{ id: 2, desc: 'מקדמה לעורכת', amount: 1500, receiptFile: 'קבלה_עורכת.pdf' }] },
-    { id: 104, title: 'כלכלת המחר', author: 'פרופ׳ יצחק לוי', date: '10/11/2026', coverFile: 'cover_draft_v2.jpg', bookFile: 'כלכלת_המחר_סופי.pdf', dedicationFile: null, invoices: [{ id: 3, desc: 'עריכה לשונית', amount: 2200, receiptFile: null }, { id: 4, desc: 'עיצוב כריכה', amount: 1800, receiptFile: null }] }
-  ],
-  published: [
-    { id: 106, title: 'המדריך השלם לבינה מלאכותית', author: 'עמית שרון', date: '15/11/2026', coverFile: 'ai_cover_final.pdf', bookFile: 'ai_book_print.pdf', dedicationFile: 'ai_dedications.pdf', invoices: [{ id: 5, desc: 'עריכה ועימוד', amount: 5500, receiptFile: 'חשבונית_עימוד.pdf' }] }
-  ]
-};
+const initialTasksFlat = [
+  { status: 'in_progress', title: 'מסע אל הלא נודע', author: 'יעל כהן', date: '15/10/2026', coverFile: null, bookFile: 'טיוטה_ראשונית.docx', dedicationFile: null, invoices: [{ id: 1, desc: 'קריאת לקטורה', amount: 450, receiptFile: null }] },
+  { status: 'in_progress', title: 'סודות המטבח האיטלקי', author: 'מיכל אהרוני', date: '01/11/2026', coverFile: null, bookFile: 'מטבח_איטלקי_עריכה.pdf', dedicationFile: null, invoices: [{ id: 2, desc: 'מקדמה לעורכת', amount: 1500, receiptFile: 'קבלה_עורכת.pdf' }] },
+  { status: 'in_progress', title: 'כלכלת המחר', author: 'פרופ׳ יצחק לוי', date: '10/11/2026', coverFile: 'cover_draft_v2.jpg', bookFile: 'כלכלת_המחר_סופי.pdf', dedicationFile: null, invoices: [{ id: 3, desc: 'עריכה לשונית', amount: 2200, receiptFile: null }, { id: 4, desc: 'עיצוב כריכה', amount: 1800, receiptFile: null }] },
+  { status: 'published', title: 'המדריך השלם לבינה מלאכותית', author: 'עמית שרון', date: '15/11/2026', coverFile: 'ai_cover_final.pdf', bookFile: 'ai_book_print.pdf', dedicationFile: 'ai_dedications.pdf', invoices: [{ id: 5, desc: 'עריכה ועימוד', amount: 5500, receiptFile: 'חשבונית_עימוד.pdf' }] }
+];
 
-const suppliers = [
-  { id: 1, name: 'מחסן ראשי - פתח תקווה', type: 'מחסן לוגיסטי', contact: 'אבי כהן', phone: '050-1234567', email: 'avi@publisher-logistics.co.il', status: 'פעיל - יש הסכם' },
-  { id: 2, name: 'צומת ספרים - מרלו"ג', type: 'רשת קמעונאית', contact: 'רונית לוי', phone: '052-7654321', email: 'ronit@zomet.co.il', status: 'פעיל - יש הסכם' },
-  { id: 3, name: 'סטימצקי - הפצה', type: 'רשת קמעונאית', contact: 'דני אלמגור', phone: '054-9876543', email: 'dani@steimatzky.co.il', status: 'ממתין לספרים' },
-  { id: 4, name: 'דפוס קורן בע"מ', type: 'בית דפוס', contact: 'שמואל קורן', phone: '02-6543210', email: 'office@koren-print.co.il', status: 'פעיל - יש הסכם' },
-  { id: 5, name: 'חנויות עצמאיות (הפצה מרוכזת)', type: 'הפצה', contact: 'יעל מזרחי', phone: '050-9988776', email: 'indie-dist@publisher.co.il', status: 'אין שיתוף פעולה' }
+const initialSuppliers = [
+  { name: 'מחסן ראשי - פתח תקווה', type: 'מחסן לוגיסטי', contact: 'אבי כהן', phone: '050-1234567', email: 'avi@publisher-logistics.co.il', status: 'פעיל - יש הסכם' },
+  { name: 'צומת ספרים - מרלו"ג', type: 'רשת קמעונאית', contact: 'רונית לוי', phone: '052-7654321', email: 'ronit@zomet.co.il', status: 'פעיל - יש הסכם' },
+  { name: 'סטימצקי - הפצה', type: 'רשת קמעונאית', contact: 'דני אלמגור', phone: '054-9876543', email: 'dani@steimatzky.co.il', status: 'ממתין לספרים' },
+  { name: 'דפוס קורן בע"מ', type: 'בית דפוס', contact: 'שמואל קורן', phone: '02-6543210', email: 'office@koren-print.co.il', status: 'פעיל - יש הסכם' },
+  { name: 'חנויות עצמאיות (הפצה מרוכזת)', type: 'הפצה', contact: 'יעל מזרחי', phone: '050-9988776', email: 'indie-dist@publisher.co.il', status: 'אין שיתוף פעולה' }
 ];
 
 const getStatusColor = (status) => {
@@ -77,17 +58,16 @@ const getStatusColor = (status) => {
   }
 };
 
-const marketingData = {
-  campaigns: [
-    { id: 1, name: 'קמפיין חגים - פייסבוק ואינסטגרם', book: 'סודות המטבח האיטלקי', budget: 4500, spent: 2100, roas: '2.4x' },
-    { id: 2, name: 'קידום ממומן גוגל (Search)', book: 'המדריך השלם לבינה מלאכותית', budget: 2000, spent: 1850, roas: '3.1x' }
-  ],
-  prCopies: [
-    { id: 1, recipient: 'עמית סגל (חדשות 12)', book: 'כלכלת המחר', date: '10/11/2026', status: 'נמסר ליעד' },
-    { id: 2, recipient: 'book.tok.il@ (טיקטוק)', book: 'אגדות היער השחור', date: '12/11/2026', status: 'במשלוח' },
-    { id: 3, recipient: 'מוסף ספרים - הארץ', book: 'מסע אל הלא נודע', date: '01/11/2026', status: 'פורסמה ביקורת' }
-  ]
-};
+const initialCampaigns = [
+  { name: 'קמפיין חגים - פייסבוק ואינסטגרם', book: 'סודות המטבח האיטלקי', budget: 4500, spent: 2100, roas: '2.4x' },
+  { name: 'קידום ממומן גוגל (Search)', book: 'המדריך השלם לבינה מלאכותית', budget: 2000, spent: 1850, roas: '3.1x' }
+];
+
+const initialPrCopies = [
+  { recipient: 'עמית סגל (חדשות 12)', book: 'כלכלת המחר', date: '10/11/2026', status: 'נמסר ליעד' },
+  { recipient: 'book.tok.il@ (טיקטוק)', book: 'אגדות היער השחור', date: '12/11/2026', status: 'במשלוח' },
+  { recipient: 'מוסף ספרים - הארץ', book: 'מסע אל הלא נודע', date: '01/11/2026', status: 'פורסמה ביקורת' }
+];
 
 const initialIntegrations = [
   { id: 'morning', name: 'Morning (חשבונית ירוקה)', type: 'הנהלת חשבונות ומסמכים', connected: true, lastSync: 'לפני 15 דקות', logo: 'M' },
@@ -97,7 +77,7 @@ const initialIntegrations = [
 
 const initialInventory = [
   { 
-    id: 1, title: 'המדריך השלם לבינה מלאכותית', author: 'עמית שרון', isbn: '978-965-123-456-7', threshold: 200, 
+    title: 'המדריך השלם לבינה מלאכותית', author: 'עמית שרון', isbn: '978-965-123-456-7', threshold: 200, 
     editions: [{ name: 'מהדורה 1', printRun: 2000 }], publisherStock: 250,
     prices: { general: 110, supplier: 55, yeshiva: 70 },
     breakdown: [
@@ -107,7 +87,7 @@ const initialInventory = [
     ]
   },
   { 
-    id: 2, title: 'שירת הים (מהדורה 1)', author: 'דוד אלמגור', isbn: '978-965-987-654-3', threshold: 100, 
+    title: 'שירת הים (מהדורה 1)', author: 'דוד אלמגור', isbn: '978-965-987-654-3', threshold: 100, 
     editions: [{ name: 'מהדורה 1', printRun: 500 }], publisherStock: 0,
     prices: { general: 88, supplier: 44, yeshiva: 60 },
     breakdown: [
@@ -116,7 +96,7 @@ const initialInventory = [
     ]
   },
   { 
-    id: 3, title: 'סודות המטבח האיטלקי', author: 'מיכל אהרוני', isbn: '978-965-456-789-0', threshold: 150, 
+    title: 'סודות המטבח האיטלקי', author: 'מיכל אהרוני', isbn: '978-965-456-789-0', threshold: 150, 
     editions: [{ name: 'מהדורה 1', printRun: 1500 }, { name: 'מהדורה 2', printRun: 1000 }], publisherStock: 100,
     prices: { general: 120, supplier: 60, yeshiva: 80 },
     breakdown: [
@@ -139,6 +119,10 @@ export default function PublisherApp() {
   const [dashboardPeriod, setDashboardPeriod] = useState('monthly'); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // --- Firebase & Database States ---
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [isDbReady, setIsDbReady] = useState(false);
+
   // --- Auth & Users States ---
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -153,7 +137,7 @@ export default function PublisherApp() {
   const [editingStats, setEditingStats] = useState(null);
 
   // --- Suppliers States ---
-  const [suppliersList, setSuppliersList] = useState(suppliers);
+  const [suppliersList, setSuppliersList] = useState(initialSuppliers.map((s, i) => ({ id: i.toString(), ...s })));
   const [isAddSupplierModalOpen, setIsAddSupplierModalOpen] = useState(false);
   const [newSupplier, setNewSupplier] = useState({ name: '', type: 'רשת קמעונאית', contact: '', phone: '', email: '', status: 'פעיל - יש הסכם' });
   const [isEditSupplierModalOpen, setIsEditSupplierModalOpen] = useState(false);
@@ -166,17 +150,21 @@ export default function PublisherApp() {
   const [invoiceItems, setInvoiceItems] = useState([]);
 
   // --- Marketing & PR States ---
-  const [campaignsList, setCampaignsList] = useState(marketingData.campaigns);
+  const [campaignsList, setCampaignsList] = useState(initialCampaigns.map((c, i) => ({ id: i.toString(), ...c })));
   const [isEditCampaignModalOpen, setIsEditCampaignModalOpen] = useState(false);
+  const [isAddCampaignModalOpen, setIsAddCampaignModalOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState(null);
+  const [newCampaign, setNewCampaign] = useState({ name: '', book: '', budget: '', spent: '', roas: '' });
 
-  const [prCopies, setPrCopies] = useState(marketingData.prCopies);
+  const [prCopies, setPrCopies] = useState(initialPrCopies.map((p, i) => ({ id: i.toString(), ...p })));
   const [isEditPrModalOpen, setIsEditPrModalOpen] = useState(false);
+  const [isAddPrModalOpen, setIsAddPrModalOpen] = useState(false);
   const [editingPr, setEditingPr] = useState(null);
+  const [newPr, setNewPr] = useState({ recipient: '', book: '', date: '', status: 'במשלוח' });
 
   // --- Inventory States ---
   const [searchQuery, setSearchQuery] = useState('');
-  const [inventoryList, setInventoryList] = useState(initialInventory);
+  const [inventoryList, setInventoryList] = useState(initialInventory.map((b, i) => ({ id: i.toString(), ...b })));
   
   const [isUpdateStockModalOpen, setIsUpdateStockModalOpen] = useState(false);
   const [stockUpdateForm, setStockUpdateForm] = useState({ bookId: '', amount: 0 });
@@ -196,14 +184,85 @@ export default function PublisherApp() {
   const [editingBook, setEditingBook] = useState(null);
 
   // --- Kanban State ---
-  const [tasks, setTasks] = useState(initialKanbanTasks);
+  const [tasksList, setTasksList] = useState(initialTasksFlat.map((t, i) => ({ id: i.toString(), ...t })));
   const [selectedTask, setSelectedTask] = useState(null);
-  const [taskColumn, setTaskColumn] = useState(null);
   const [newInvoice, setNewInvoice] = useState({ desc: '', amount: '' });
+
+  // Derived Kanban Tasks Object
+  const tasks = {
+    in_progress: tasksList.filter(t => t.status === 'in_progress'),
+    published: tasksList.filter(t => t.status === 'published')
+  };
 
   // --- Integrations State ---
   const [integrations, setIntegrations] = useState(initialIntegrations);
   const [isSyncing, setIsSyncing] = useState(null);
+
+  // --- FIREBASE EFFECTS ---
+  useEffect(() => {
+    if (!auth) {
+      setIsDbReady(true);
+      return;
+    }
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth error:", error);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setFirebaseUser(u);
+      if (u) setIsDbReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!db || !isDbReady || !firebaseUser) return;
+
+    const unsubs = [];
+
+    const seedDatabase = async () => {
+      try {
+        const snap = await getDocs(getCollRef('inventory'));
+        if (snap.empty) {
+          console.log("Seeding initial mock data to Database...");
+          await setDoc(getDocRef('globals', 'stats'), initialStatsData);
+          for (const item of initialInventory) await addDoc(getCollRef('inventory'), item);
+          for (const item of initialSuppliers) await addDoc(getCollRef('suppliers'), item);
+          for (const item of initialCampaigns) await addDoc(getCollRef('campaigns'), item);
+          for (const item of initialPrCopies) await addDoc(getCollRef('prCopies'), item);
+          for (const item of initialTasksFlat) await addDoc(getCollRef('tasks'), item);
+        }
+        return true;
+      } catch (e) {
+        console.warn("Firebase permission denied. Falling back to local state mode.", e);
+        db = null; // Disable DB, use local state
+        return false;
+      }
+    };
+
+    seedDatabase().then((success) => {
+      if (!success) return;
+      unsubs.push(onSnapshot(getCollRef('inventory'), snap => setInventoryList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
+      unsubs.push(onSnapshot(getCollRef('suppliers'), snap => setSuppliersList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
+      unsubs.push(onSnapshot(getCollRef('campaigns'), snap => setCampaignsList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
+      unsubs.push(onSnapshot(getCollRef('prCopies'), snap => setPrCopies(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
+      unsubs.push(onSnapshot(getCollRef('tasks'), snap => setTasksList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
+      unsubs.push(onSnapshot(getDocRef('globals', 'stats'), snap => {
+        if (snap.exists()) setStatsData(snap.data());
+      }, console.error));
+    });
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, [isDbReady, firebaseUser]);
+
 
   // --- Handlers ---
   const handleLogin = (e) => {
@@ -223,25 +282,14 @@ export default function PublisherApp() {
     e.preventDefault();
     if (!newUser.username || !newUser.password || !newUser.name) return;
     
-    // Add to state
     setUsersList([...usersList, { 
-      username: newUser.username, 
-      password: newUser.password, 
-      role: newUser.role, 
-      name: newUser.name 
+      username: newUser.username, password: newUser.password, role: newUser.role, name: newUser.name 
     }]);
 
-    // Send Email via Mailto
     if (newUser.email) {
       const subject = encodeURIComponent("פרטי התחברות למערכת ניהול הוצאה לאור");
       const body = encodeURIComponent(
-        `שלום ${newUser.name},\n\n` +
-        `נוצר עבורך משתמש חדש למערכת ניהול ההוצאה לאור.\n` +
-        `להלן פרטי ההתחברות שלך:\n\n` +
-        `שם משתמש: ${newUser.username}\n` +
-        `סיסמה: ${newUser.password}\n\n` +
-        `הרשאה: ${newUser.role === 'admin' ? 'מנהל מערכת' : 'צופה (קריאה בלבד)'}\n\n` +
-        `בברכה,\nהנהלת המערכת`
+        `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת ניהול ההוצאה לאור.\nלהלן פרטי ההתחברות שלך:\n\nשם משתמש: ${newUser.username}\nסיסמה: ${newUser.password}\n\nהרשאה: ${newUser.role === 'admin' ? 'מנהל מערכת' : 'צופה (קריאה בלבד)'}\n\nבברכה,\nהנהלת המערכת`
       );
       window.location.href = `mailto:${newUser.email}?subject=${subject}&body=${body}`;
     }
@@ -285,26 +333,27 @@ export default function PublisherApp() {
     setIsEditStatsModalOpen(true);
   };
 
-  const handleEditStatsSubmit = (e) => {
+  const handleEditStatsSubmit = async (e) => {
     e.preventDefault();
-    setStatsData({
-      ...statsData,
-      [dashboardPeriod]: editingStats
-    });
+    const newData = { ...statsData, [dashboardPeriod]: editingStats };
+    if (db) await setDoc(getDocRef('globals', 'stats'), newData);
+    else setStatsData(newData);
     setIsEditStatsModalOpen(false);
   };
 
   // Supplier Handlers
-  const handleAddSupplier = (e) => {
+  const handleAddSupplier = async (e) => {
     e.preventDefault();
-    setSuppliersList([...suppliersList, { ...newSupplier, id: Date.now() }]);
+    if (db) await addDoc(getCollRef('suppliers'), newSupplier);
+    else setSuppliersList([...suppliersList, { ...newSupplier, id: Date.now().toString() }]);
     setIsAddSupplierModalOpen(false);
     setNewSupplier({ name: '', type: 'רשת קמעונאית', contact: '', phone: '', email: '', status: 'פעיל - יש הסכם' });
   };
 
-  const handleEditSupplierSubmit = (e) => {
+  const handleEditSupplierSubmit = async (e) => {
     e.preventDefault();
-    setSuppliersList(suppliersList.map(s => s.id === editingSupplier.id ? editingSupplier : s));
+    if (db) await updateDoc(getDocRef('suppliers', editingSupplier.id), editingSupplier);
+    else setSuppliersList(suppliersList.map(s => s.id === editingSupplier.id ? editingSupplier : s));
     setIsEditSupplierModalOpen(false);
   };
 
@@ -319,34 +368,25 @@ export default function PublisherApp() {
     const newItems = [...invoiceItems];
     if (field === 'bookId') {
       newItems[index].bookId = value;
-      // Auto-populate price
-      const book = inventoryList.find(b => b.id.toString() === value);
-      if (book) {
-        newItems[index].price = book.prices.supplier;
-      }
+      const book = inventoryList.find(b => b.id === value);
+      if (book) newItems[index].price = book.prices.supplier;
     } else {
       newItems[index][field] = Number(value);
     }
     setInvoiceItems(newItems);
   };
 
-  const addInvoiceItemRow = () => {
-    setInvoiceItems([...invoiceItems, { bookId: '', amount: 1, price: 0 }]);
-  };
-
-  const removeInvoiceItemRow = (index) => {
-    setInvoiceItems(invoiceItems.filter((_, i) => i !== index));
-  };
+  const addInvoiceItemRow = () => setInvoiceItems([...invoiceItems, { bookId: '', amount: 1, price: 0 }]);
+  const removeInvoiceItemRow = (index) => setInvoiceItems(invoiceItems.filter((_, i) => i !== index));
 
   const sendInvoiceEmail = () => {
     if (!invoiceSupplier || !invoiceSupplier.email) {
       alert("לספק זה לא מוגדרת כתובת דוא״ל במערכת.");
       return;
     }
-
     let totalOrderPrice = 0;
     let itemsText = invoiceItems.map(item => {
-      const book = inventoryList.find(b => b.id.toString() === item.bookId);
+      const book = inventoryList.find(b => b.id === item.bookId);
       if (!book) return '';
       const lineTotal = item.amount * item.price;
       totalOrderPrice += lineTotal;
@@ -354,76 +394,72 @@ export default function PublisherApp() {
     }).join('\n');
 
     const subject = encodeURIComponent(`הזמנה / סיכום פרטי הפצה - ${invoiceSupplier.name}`);
-    const body = encodeURIComponent(
-      `שלום ${invoiceSupplier.contact},\n\n` +
-      `להלן סיכום הזמנת ספרים / תעודת משלוח מול ההוצאה לאור:\n\n` +
-      `${itemsText}\n\n` +
-      `--------------------------------\n` +
-      `סה"כ לתשלום / חיוב: ₪${totalOrderPrice.toLocaleString()}\n` +
-      `--------------------------------\n\n` +
-      `נא לאשר קבלת המייל וההזמנה.\n\nבברכה,\nהוצאה לאור.`
-    );
-
+    const body = encodeURIComponent(`שלום ${invoiceSupplier.contact},\n\nלהלן סיכום הזמנת ספרים / תעודת משלוח מול ההוצאה לאור:\n\n${itemsText}\n\n--------------------------------\nסה"כ לתשלום / חיוב: ₪${totalOrderPrice.toLocaleString()}\n--------------------------------\n\nנא לאשר קבלת המייל וההזמנה.\n\nבברכה,\nהוצאה לאור.`);
     window.location.href = `mailto:${invoiceSupplier.email}?subject=${subject}&body=${body}`;
     setIsSupplierInvoiceModalOpen(false);
   };
 
-
   // PR and Campaigns Handlers
-  const handleEditCampaignSubmit = (e) => {
+  const handleAddCampaignSubmit = async (e) => {
     e.preventDefault();
-    setCampaignsList(campaignsList.map(camp => camp.id === editingCampaign.id ? editingCampaign : camp));
+    if (db) await addDoc(getCollRef('campaigns'), newCampaign);
+    else setCampaignsList([...campaignsList, { ...newCampaign, id: Date.now().toString() }]);
+    setIsAddCampaignModalOpen(false);
+    setNewCampaign({ name: '', book: '', budget: '', spent: '', roas: '' });
+  };
+
+  const handleEditCampaignSubmit = async (e) => {
+    e.preventDefault();
+    if (db) await updateDoc(getDocRef('campaigns', editingCampaign.id), editingCampaign);
+    else setCampaignsList(campaignsList.map(camp => camp.id === editingCampaign.id ? editingCampaign : camp));
     setIsEditCampaignModalOpen(false);
   };
 
-  const handleEditPrSubmit = (e) => {
+  const handleAddPrSubmit = async (e) => {
     e.preventDefault();
-    setPrCopies(prCopies.map(pr => pr.id === editingPr.id ? editingPr : pr));
+    if (db) await addDoc(getCollRef('prCopies'), newPr);
+    else setPrCopies([...prCopies, { ...newPr, id: Date.now().toString() }]);
+    setIsAddPrModalOpen(false);
+    setNewPr({ recipient: '', book: '', date: '', status: 'במשלוח' });
+  };
+
+  const handleEditPrSubmit = async (e) => {
+    e.preventDefault();
+    if (db) await updateDoc(getDocRef('prCopies', editingPr.id), editingPr);
+    else setPrCopies(prCopies.map(pr => pr.id === editingPr.id ? editingPr : pr));
     setIsEditPrModalOpen(false);
   };
 
   // Book Editions Handlers
   const handleAddEdition = (formSetter, formState) => {
-    formSetter({
-      ...formState,
-      editions: [...formState.editions, { name: `מהדורה ${formState.editions.length + 1}`, printRun: 0 }]
-    });
+    formSetter({ ...formState, editions: [...formState.editions, { name: `מהדורה ${formState.editions.length + 1}`, printRun: 0 }] });
   };
-
   const handleUpdateEdition = (formSetter, formState, index, field, value) => {
     const updatedEditions = [...formState.editions];
     updatedEditions[index][field] = field === 'printRun' ? Number(value) : value;
     formSetter({ ...formState, editions: updatedEditions });
   };
-
   const handleRemoveEdition = (formSetter, formState, index) => {
     const updatedEditions = formState.editions.filter((_, i) => i !== index);
     formSetter({ ...formState, editions: updatedEditions });
   };
 
   // Add Book Handlers
-  const handleAddBook = (e) => {
+  const handleAddBook = async (e) => {
     e.preventDefault();
-    const newBook = { ...newBookForm, id: Date.now() };
-    setInventoryList([...inventoryList, newBook]);
+    if (db) await addDoc(getCollRef('inventory'), newBookForm);
+    else setInventoryList([...inventoryList, { ...newBookForm, id: Date.now().toString() }]);
     setIsAddBookModalOpen(false);
     setNewBookForm(initialBookFormState);
   };
 
-  const handleAddBookBreakdownRow = () => {
-    setNewBookForm({ ...newBookForm, breakdown: [...newBookForm.breakdown, { supplier: '', amount: 0 }] });
-  };
-
+  const handleAddBookBreakdownRow = () => setNewBookForm({ ...newBookForm, breakdown: [...newBookForm.breakdown, { supplier: '', amount: 0 }] });
   const handleUpdateBookBreakdownRow = (index, field, value) => {
     const updatedBreakdown = [...newBookForm.breakdown];
     updatedBreakdown[index][field] = field === 'amount' ? Number(value) : value;
     setNewBookForm({ ...newBookForm, breakdown: updatedBreakdown });
   };
-
-  const handleRemoveBookBreakdownRow = (index) => {
-    const updatedBreakdown = newBookForm.breakdown.filter((_, i) => i !== index);
-    setNewBookForm({ ...newBookForm, breakdown: updatedBreakdown });
-  };
+  const handleRemoveBookBreakdownRow = (index) => setNewBookForm({ ...newBookForm, breakdown: newBookForm.breakdown.filter((_, i) => i !== index) });
 
   // Edit Book Handlers
   const openEditBook = (book) => {
@@ -431,45 +467,43 @@ export default function PublisherApp() {
     setIsEditBookModalOpen(true);
   };
 
-  const handleEditBookSubmit = (e) => {
+  const handleEditBookSubmit = async (e) => {
     e.preventDefault();
-    setInventoryList(inventoryList.map(b => b.id === editingBook.id ? editingBook : b));
+    if (db) await updateDoc(getDocRef('inventory', editingBook.id), editingBook);
+    else setInventoryList(inventoryList.map(b => b.id === editingBook.id ? editingBook : b));
     setIsEditBookModalOpen(false);
     setEditingBook(null);
   };
 
-  const handleEditBookBreakdownRow = () => {
-    setEditingBook({ ...editingBook, breakdown: [...editingBook.breakdown, { supplier: '', amount: 0 }] });
-  };
-
+  const handleEditBookBreakdownRow = () => setEditingBook({ ...editingBook, breakdown: [...editingBook.breakdown, { supplier: '', amount: 0 }] });
   const handleUpdateEditBookBreakdownRow = (index, field, value) => {
     const updatedBreakdown = [...editingBook.breakdown];
     updatedBreakdown[index][field] = field === 'amount' ? Number(value) : value;
     setEditingBook({ ...editingBook, breakdown: updatedBreakdown });
   };
+  const handleRemoveEditBookBreakdownRow = (index) => setEditingBook({ ...editingBook, breakdown: editingBook.breakdown.filter((_, i) => i !== index) });
 
-  const handleRemoveEditBookBreakdownRow = (index) => {
-    const updatedBreakdown = editingBook.breakdown.filter((_, i) => i !== index);
-    setEditingBook({ ...editingBook, breakdown: updatedBreakdown });
-  };
-
-  const handleDeleteBook = (id) => {
+  const handleDeleteBook = async (id) => {
     if (window.confirm("האם אתה בטוח שברצונך למחוק ספר זה מהמלאי לצמיתות?")) {
-      setInventoryList(inventoryList.filter(book => book.id !== id));
+      if (db) await deleteDoc(getDocRef('inventory', id));
+      else setInventoryList(inventoryList.filter(book => book.id !== id));
     }
   };
 
   // Manual Stock Update Handler
-  const handleManualStockUpdate = (e) => {
+  const handleManualStockUpdate = async (e) => {
     e.preventDefault();
     const amount = Number(stockUpdateForm.amount);
     if (!stockUpdateForm.bookId || isNaN(amount)) return;
     
-    setInventoryList(inventoryList.map(book => 
-      book.id.toString() === stockUpdateForm.bookId 
-        ? { ...book, publisherStock: Math.max(0, Number(book.publisherStock) + amount) } 
-        : book
-    ));
+    if (db) {
+      const book = inventoryList.find(b => b.id === stockUpdateForm.bookId);
+      if (book) await updateDoc(getDocRef('inventory', book.id), { publisherStock: Math.max(0, Number(book.publisherStock) + amount) });
+    } else {
+      setInventoryList(inventoryList.map(book => 
+        book.id === stockUpdateForm.bookId ? { ...book, publisherStock: Math.max(0, Number(book.publisherStock) + amount) } : book
+      ));
+    }
     
     setIsUpdateStockModalOpen(false);
     setStockUpdateForm({ bookId: '', amount: 0 });
@@ -510,26 +544,31 @@ export default function PublisherApp() {
     book.isbn.includes(searchQuery)
   );
 
-  const handleAddInvoice = (e) => {
+  // Kanban Tasks Handlers
+  const handleAddInvoice = async (e) => {
     e.preventDefault();
     if (!newInvoice.desc || !newInvoice.amount) return;
-    const updatedTask = { ...selectedTask, invoices: [...selectedTask.invoices, { id: Date.now(), desc: newInvoice.desc, amount: Number(newInvoice.amount), receiptFile: null }] };
-    setTasks({ ...tasks, [taskColumn]: tasks[taskColumn].map(t => t.id === selectedTask.id ? updatedTask : t) });
-    setSelectedTask(updatedTask);
+    const updatedInvoices = [...selectedTask.invoices, { id: Date.now(), desc: newInvoice.desc, amount: Number(newInvoice.amount), receiptFile: null }];
+    
+    if (db) await updateDoc(getDocRef('tasks', selectedTask.id), { invoices: updatedInvoices });
+    else setTasksList(tasksList.map(t => t.id === selectedTask.id ? { ...t, invoices: updatedInvoices } : t));
+    
+    setSelectedTask({ ...selectedTask, invoices: updatedInvoices });
     setNewInvoice({ desc: '', amount: '' });
   };
 
-  const handleInvoiceReceiptUpload = (invoiceId) => {
-    const updatedTask = { ...selectedTask, invoices: selectedTask.invoices.map(inv => inv.id === invoiceId ? { ...inv, receiptFile: 'אסמכתא_הועלתה.pdf' } : inv) };
-    setTasks({ ...tasks, [taskColumn]: tasks[taskColumn].map(t => t.id === selectedTask.id ? updatedTask : t) });
-    setSelectedTask(updatedTask);
+  const handleInvoiceReceiptUpload = async (invoiceId) => {
+    const updatedInvoices = selectedTask.invoices.map(inv => inv.id === invoiceId ? { ...inv, receiptFile: 'אסמכתא_הועלתה.pdf' } : inv);
+    if (db) await updateDoc(getDocRef('tasks', selectedTask.id), { invoices: updatedInvoices });
+    else setTasksList(tasksList.map(t => t.id === selectedTask.id ? { ...t, invoices: updatedInvoices } : t));
+    setSelectedTask({ ...selectedTask, invoices: updatedInvoices });
   };
 
-  const handleFileUpload = (type) => {
+  const handleFileUpload = async (type) => {
     let fileName = type === 'coverFile' ? 'new_cover_uploaded.jpg' : type === 'bookFile' ? 'book_manuscript_v2.pdf' : 'dedications_list.docx';
-    const updatedTask = { ...selectedTask, [type]: fileName };
-    setTasks({ ...tasks, [taskColumn]: tasks[taskColumn].map(t => t.id === selectedTask.id ? updatedTask : t) });
-    setSelectedTask(updatedTask);
+    if (db) await updateDoc(getDocRef('tasks', selectedTask.id), { [type]: fileName });
+    else setTasksList(tasksList.map(t => t.id === selectedTask.id ? { ...t, [type]: fileName } : t));
+    setSelectedTask({ ...selectedTask, [type]: fileName });
   };
 
   const navItems = [
@@ -818,7 +857,7 @@ export default function PublisherApp() {
             <div className="flex flex-col h-full animate-in fade-in duration-300">
               {userRole === 'admin' && (
                 <div className="flex justify-end mb-4">
-                  <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2">
+                  <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 opacity-50 cursor-not-allowed" title="בקרוב">
                     <Plus className="w-4 h-4" /> הוסף פרויקט הפקה חדש
                   </button>
                 </div>
@@ -833,14 +872,14 @@ export default function PublisherApp() {
                         <h3 className="font-bold text-slate-700">{col.title}</h3>
                       </div>
                       <div className="flex-1 space-y-3">
-                        {tasks[col.id].map((task) => {
-                          const totalExpenses = task.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+                        {tasks[col.id]?.map((task) => {
+                          const totalExpenses = task.invoices ? task.invoices.reduce((sum, inv) => sum + inv.amount, 0) : 0;
                           const filesCount = (task.coverFile ? 1 : 0) + (task.bookFile ? 1 : 0) + (task.dedicationFile ? 1 : 0);
                           
                           return (
                             <div 
                               key={task.id} 
-                              onClick={() => { setSelectedTask(task); setTaskColumn(col.id); }}
+                              onClick={() => setSelectedTask(task)}
                               className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all hover:border-indigo-200 cursor-pointer group"
                             >
                               <h4 className="font-bold text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">{task.title}</h4>
@@ -883,6 +922,11 @@ export default function PublisherApp() {
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col w-full overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="text-base md:text-lg font-bold flex items-center gap-2"><Megaphone className="w-5 h-5 text-indigo-600" /> קמפיינים</h3>
+                  {userRole === 'admin' && (
+                    <button onClick={() => setIsAddCampaignModalOpen(true)} className="text-xs md:text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                      <Plus className="w-4 h-4" /> הוסף
+                    </button>
+                  )}
                 </div>
                 <div className="p-4 md:p-6 space-y-5 md:space-y-6">
                   {campaignsList.map(camp => (
@@ -900,7 +944,7 @@ export default function PublisherApp() {
                            <span>נוצל: ₪{Number(camp.spent).toLocaleString()}</span>
                            <span>מתוך ₪{Number(camp.budget).toLocaleString()}</span>
                        </div>
-                       <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2"><div className="bg-indigo-500 h-1.5 md:h-2 rounded-full" style={{ width: `${(camp.spent/camp.budget)*100}%`}}></div></div>
+                       <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2"><div className="bg-indigo-500 h-1.5 md:h-2 rounded-full" style={{ width: `${(Number(camp.spent)/Number(camp.budget))*100}%`}}></div></div>
                     </div>
                   ))}
                 </div>
@@ -910,6 +954,11 @@ export default function PublisherApp() {
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col w-full overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2"><Share2 className="w-5 h-5 text-pink-500" /> עותקי סיקור ויח"צ</h3>
+                  {userRole === 'admin' && (
+                    <button onClick={() => setIsAddPrModalOpen(true)} className="text-xs md:text-sm font-medium text-pink-600 hover:text-pink-700 bg-pink-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                      <Plus className="w-4 h-4" /> חדש
+                    </button>
+                  )}
                 </div>
                 <div className="p-0 flex-1 overflow-x-auto w-full">
                   <table className="w-full text-right text-sm min-w-[350px]">
@@ -1150,6 +1199,29 @@ export default function PublisherApp() {
         </div>
       )}
 
+      {/* Add New Supplier Modal */}
+      {isAddSupplierModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <h3 className="font-bold text-base md:text-lg text-slate-800">הוספת ספק / רשת</h3>
+              <button onClick={() => setIsAddSupplierModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md shadow-sm border border-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 md:p-6 overflow-y-auto">
+              <form onSubmit={handleAddSupplier} className="space-y-4">
+                <div><label className="block text-sm font-medium mb-1">שם הספק</label><input required type="text" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" /></div>
+                <div><label className="block text-sm font-medium mb-1">סוג</label><select value={newSupplier.type} onChange={e => setNewSupplier({...newSupplier, type: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50"><option>רשת קמעונאית</option><option>הפצה</option><option>מחסן לוגיסטי</option><option>בית דפוס</option></select></div>
+                <div><label className="block text-sm font-medium mb-1">סטטוס</label><select value={newSupplier.status} onChange={e => setNewSupplier({...newSupplier, status: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50"><option>פעיל - יש הסכם</option><option>ללא הסכם מכירה</option><option>ממתין לספרים</option><option>אין שיתוף פעולה</option></select></div>
+                <div><label className="block text-sm font-medium mb-1">איש קשר</label><input required type="text" value={newSupplier.contact} onChange={e => setNewSupplier({...newSupplier, contact: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" /></div>
+                <div><label className="block text-sm font-medium mb-1">טלפון</label><input required type="text" value={newSupplier.phone} onChange={e => setNewSupplier({...newSupplier, phone: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" /></div>
+                <div><label className="block text-sm font-medium mb-1">אימייל</label><input required type="email" value={newSupplier.email} onChange={e => setNewSupplier({...newSupplier, email: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" /></div>
+                <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-medium mt-4">הוסף ספק למערכת</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Supplier Modal */}
       {isEditSupplierModalOpen && editingSupplier && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1167,6 +1239,30 @@ export default function PublisherApp() {
                 <div><label className="block text-sm font-medium mb-1">טלפון</label><input required type="text" value={editingSupplier.phone} onChange={e => setEditingSupplier({...editingSupplier, phone: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" /></div>
                 <div><label className="block text-sm font-medium mb-1">אימייל</label><input required type="email" value={editingSupplier.email} onChange={e => setEditingSupplier({...editingSupplier, email: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" /></div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-medium mt-4">שמור שינויים</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Marketing Campaign Modal */}
+      {isAddCampaignModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="p-4 md:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-base md:text-lg text-slate-800">הוספת קמפיין שיווק חדש</h3>
+              <button onClick={() => setIsAddCampaignModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md border border-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 md:p-5">
+              <form onSubmit={handleAddCampaignSubmit} className="space-y-4">
+                <div><label className="block text-sm font-medium mb-1">שם הקמפיין</label><input type="text" required value={newCampaign.name} onChange={e => setNewCampaign({...newCampaign, name: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" /></div>
+                <div><label className="block text-sm font-medium mb-1">ספר מקודם</label><input type="text" required value={newCampaign.book} onChange={e => setNewCampaign({...newCampaign, book: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-sm font-medium mb-1">תקציב (₪)</label><input type="number" required value={newCampaign.budget} onChange={e => setNewCampaign({...newCampaign, budget: Number(e.target.value)})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" dir="ltr" /></div>
+                  <div><label className="block text-sm font-medium mb-1">נוצל (₪)</label><input type="number" required value={newCampaign.spent} onChange={e => setNewCampaign({...newCampaign, spent: Number(e.target.value)})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" dir="ltr" /></div>
+                </div>
+                <div><label className="block text-sm font-medium mb-1">החזר / תוצאה (ROAS)</label><input type="text" required value={newCampaign.roas} onChange={e => setNewCampaign({...newCampaign, roas: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" dir="ltr" placeholder="לדוגמה: 2.5x" /></div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 md:py-2.5 rounded-xl font-medium mt-2">הוסף קמפיין למערכת</button>
               </form>
             </div>
           </div>
@@ -1191,6 +1287,31 @@ export default function PublisherApp() {
                 </div>
                 <div><label className="block text-sm font-medium mb-1">החזר / תוצאה (ROAS)</label><input type="text" required value={editingCampaign.roas} onChange={e => setEditingCampaign({...editingCampaign, roas: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" dir="ltr" /></div>
                 <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 md:py-2.5 rounded-xl font-medium mt-2">שמור קמפיין</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add PR Copy Modal */}
+      {isAddPrModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="p-4 md:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-base md:text-lg text-slate-800">הוספת עותק סיקור / יח"צ</h3>
+              <button onClick={() => setIsAddPrModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md border border-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 md:p-5">
+              <form onSubmit={handleAddPrSubmit} className="space-y-4">
+                <div><label className="block text-sm font-medium mb-1">נמען (משפיען/מבקר)</label><input type="text" required value={newPr.recipient} onChange={e => setNewPr({...newPr, recipient: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" placeholder="לדוגמה: מוסף ספרים הארץ" /></div>
+                <div><label className="block text-sm font-medium mb-1">ספר נשלח</label><input type="text" required value={newPr.book} onChange={e => setNewPr({...newPr, book: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">סטטוס מול המשפיען</label>
+                  <select value={newPr.status} onChange={e => setNewPr({...newPr, status: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
+                    <option>במשלוח</option><option>נמסר ליעד</option><option>פורסמה ביקורת</option><option>לא פורסם</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full bg-pink-500 hover:bg-pink-600 text-white py-3 md:py-2.5 rounded-xl font-medium mt-2">שמור פעילות יח"צ</button>
               </form>
             </div>
           </div>
