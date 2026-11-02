@@ -35,7 +35,6 @@ import {
 } from 'lucide-react';
 
 // --- Mock Data ---
-// נתוני הדאשבורד הפכו למשתנה התחלתי שניתן לעריכה
 const initialStatsData = {
   monthly: { inProduction: '12', completed: '145', sold: '3,240', revenue: '142,500', trend: '+18.5%', alerts: '3' },
   yearly: { inProduction: '12', completed: '34', sold: '38,500', revenue: '1,750,000', trend: '+42.3%', alerts: '3' }
@@ -165,6 +164,9 @@ export default function PublisherApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [inventoryList, setInventoryList] = useState(initialInventory);
   
+  const [isUpdateStockModalOpen, setIsUpdateStockModalOpen] = useState(false);
+  const [stockUpdateForm, setStockUpdateForm] = useState({ bookId: '', amount: 0 });
+
   const initialBookFormState = {
     title: '', author: '', isbn: '', threshold: 50,
     editions: [{ name: 'מהדורה 1', printRun: 1000 }],
@@ -334,6 +336,23 @@ export default function PublisherApp() {
     }
   };
 
+  // Manual Stock Update Handler
+  const handleManualStockUpdate = (e) => {
+    e.preventDefault();
+    const amount = Number(stockUpdateForm.amount);
+    if (!stockUpdateForm.bookId || isNaN(amount)) return;
+    
+    setInventoryList(inventoryList.map(book => 
+      book.id.toString() === stockUpdateForm.bookId 
+        ? { ...book, publisherStock: Math.max(0, Number(book.publisherStock) + amount) } 
+        : book
+    ));
+    
+    setIsUpdateStockModalOpen(false);
+    setStockUpdateForm({ bookId: '', amount: 0 });
+  };
+
+  // Integrations
   const handleToggleIntegration = (id) => {
     if (userRole !== 'admin') return;
     setIntegrations(integrations.map(int => 
@@ -535,7 +554,10 @@ export default function PublisherApp() {
                     <button onClick={() => window.print()} className="bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Printer className="w-3.5 h-3.5 md:w-4 md:h-4" /> הדפס</button>
                     <button onClick={handleExportCSV} className="bg-slate-100 hover:bg-slate-200 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייצוא</button>
                     {userRole === 'admin' && (
-                      <button onClick={() => setIsAddBookModalOpen(true)} className="col-span-2 sm:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 shadow-sm whitespace-nowrap"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> הוסף ספר</button>
+                      <>
+                        <button onClick={() => setIsUpdateStockModalOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-4" /> עדכון ידני</button>
+                        <button onClick={() => setIsAddBookModalOpen(true)} className="col-span-2 sm:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 shadow-sm whitespace-nowrap"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> הוסף ספר</button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -655,6 +677,69 @@ export default function PublisherApp() {
             </div>
           )}
 
+          {/* PRODUCTION (KANBAN) VIEW */}
+          {activeTab === 'production' && (
+            <div className="flex flex-col h-full animate-in fade-in duration-300">
+              {userRole === 'admin' && (
+                <div className="flex justify-end mb-4">
+                  <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2">
+                    <Plus className="w-4 h-4" /> הוסף פרויקט הפקה חדש
+                  </button>
+                </div>
+              )}
+              <div className="flex gap-4 md:gap-6 h-full min-h-[450px] overflow-x-auto pb-4 snap-x">
+                {kanbanColumns.map((col) => {
+                  const Icon = col.icon;
+                  return (
+                    <div key={col.id} className={`snap-center flex-1 min-w-[280px] md:min-w-[320px] rounded-2xl border ${col.color} p-4 flex flex-col`}>
+                      <div className="flex items-center gap-2 mb-4">
+                        <Icon className="w-5 h-5 text-slate-600" />
+                        <h3 className="font-bold text-slate-700">{col.title}</h3>
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        {tasks[col.id].map((task) => {
+                          const totalExpenses = task.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+                          const filesCount = (task.coverFile ? 1 : 0) + (task.bookFile ? 1 : 0) + (task.dedicationFile ? 1 : 0);
+                          
+                          return (
+                            <div 
+                              key={task.id} 
+                              onClick={() => { setSelectedTask(task); setTaskColumn(col.id); }}
+                              className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all hover:border-indigo-200 cursor-pointer group"
+                            >
+                              <h4 className="font-bold text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">{task.title}</h4>
+                              <p className="text-sm text-slate-500 mb-3">מאת: {task.author}</p>
+                              
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                {filesCount > 0 && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-md">
+                                    <Paperclip className="w-3 h-3" />
+                                    {filesCount} קבצים
+                                  </span>
+                                )}
+                                {totalExpenses > 0 && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md">
+                                    <DollarSign className="w-3 h-3" />
+                                    ₪{totalExpenses.toLocaleString()} הוצאות
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex justify-between items-center text-xs text-slate-400 mt-2 pt-3 border-t border-slate-50">
+                                <span>יעד סיום:</span>
+                                <span className="bg-slate-50 px-2 py-1 rounded-md text-slate-600">{task.date}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* MARKETING AND PR VIEW */}
           {activeTab === 'marketing' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 animate-in fade-in duration-300 w-full">
@@ -711,6 +796,62 @@ export default function PublisherApp() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* INTEGRATIONS AND AUTOMATION VIEW */}
+          {activeTab === 'integrations' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg md:text-xl font-bold text-slate-800">אינטגרציות ומערכות</h3>
+                  <p className="text-slate-500 text-xs md:text-sm mt-1">חיבור אוטומטי למערכות הפקת חשבוניות וחנויות</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                {integrations.map((int) => (
+                  <div key={int.id} className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-slate-100 hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-800 text-white flex items-center justify-center text-lg md:text-xl font-bold">
+                        {int.logo}
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <button 
+                          onClick={() => handleToggleIntegration(int.id)}
+                          disabled={userRole !== 'admin'}
+                          className={`w-10 md:w-12 h-5 md:h-6 rounded-full transition-colors relative focus:outline-none ${int.connected ? 'bg-emerald-500' : 'bg-slate-300'} ${userRole !== 'admin' && 'opacity-70 cursor-not-allowed'}`}
+                        >
+                          <span className={`absolute top-0.5 md:top-1 bg-white w-4 h-4 rounded-full transition-all shadow-sm ${int.connected ? 'left-1' : 'right-1'}`} />
+                        </button>
+                        <span className={`text-[10px] md:text-xs font-medium ${int.connected ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {int.connected ? 'מחובר' : 'מנותק'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <h4 className="text-base md:text-lg font-bold text-slate-800">{int.name}</h4>
+                    <p className="text-xs md:text-sm text-slate-500 mb-6">{int.type}</p>
+                    
+                    <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                      <div className="text-[10px] md:text-xs text-slate-400">
+                        סנכרון אחרון:<br/><span className="text-slate-600 font-medium">{int.lastSync}</span>
+                      </div>
+                      <button 
+                        onClick={() => handleSync(int.id)}
+                        disabled={!int.connected || isSyncing === int.id || userRole !== 'admin'}
+                        className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+                          !int.connected || userRole !== 'admin' ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : 
+                          'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                        }`}
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 ${isSyncing === int.id ? 'animate-spin' : ''}`} />
+                        סנכרן
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1027,6 +1168,161 @@ export default function PublisherApp() {
                   עדכן מלאי
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task (Book Production) Modal */}
+      {selectedTask && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full h-[90vh] md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50 shrink-0">
+              <div>
+                <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-1">{selectedTask.title}</h2>
+                <p className="text-sm md:text-base text-slate-500">מאת: {selectedTask.author} | יעד לסיום: {selectedTask.date}</p>
+              </div>
+              <button onClick={() => setSelectedTask(null)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-md shadow-sm border border-slate-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8">
+              
+              {/* Files Section */}
+              <section>
+                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Paperclip className="w-5 h-5 text-indigo-600" />
+                  קבצי מקור
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                  
+                  {/* Cover */}
+                  <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
+                    <div className={`p-3 rounded-full ${selectedTask.coverFile ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                      <ImageIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm text-slate-700">עיצוב כריכה</p>
+                      {selectedTask.coverFile ? 
+                        <p className="text-xs text-emerald-600 mt-1 font-mono">{selectedTask.coverFile}</p> : 
+                        <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}
+                    </div>
+                    {userRole === 'admin' && (
+                      <button onClick={() => handleFileUpload('coverFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center">
+                        <Upload className="w-3 h-3" /> {selectedTask.coverFile ? 'החלף קובץ' : 'העלה קובץ'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Manuscript */}
+                  <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
+                    <div className={`p-3 rounded-full ${selectedTask.bookFile ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm text-slate-700">קובץ הספר (פנים)</p>
+                      {selectedTask.bookFile ? 
+                        <p className="text-xs text-blue-600 mt-1 font-mono">{selectedTask.bookFile}</p> : 
+                        <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}
+                    </div>
+                    {userRole === 'admin' && (
+                      <button onClick={() => handleFileUpload('bookFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center">
+                        <Upload className="w-3 h-3" /> {selectedTask.bookFile ? 'החלף קובץ' : 'העלה קובץ'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dedications */}
+                  <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
+                    <div className={`p-3 rounded-full ${selectedTask.dedicationFile ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}>
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm text-slate-700">רשימת הקדשות</p>
+                      {selectedTask.dedicationFile ? 
+                        <p className="text-xs text-purple-600 mt-1 font-mono">{selectedTask.dedicationFile}</p> : 
+                        <p className="text-xs text-slate-400 mt-1">לא הועלה</p>}
+                    </div>
+                    {userRole === 'admin' && (
+                      <button onClick={() => handleFileUpload('dedicationFile')} className="mt-2 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 w-full justify-center">
+                        <Upload className="w-3 h-3" /> {selectedTask.dedicationFile ? 'החלף קובץ' : 'העלה קובץ'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* Invoices Section */}
+              <section>
+                <div className="flex justify-between items-end mb-4">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-indigo-600" />
+                    מעקב הוצאות וחשבוניות (תמחור)
+                  </h3>
+                  <div className="text-sm font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">
+                    סה"כ: ₪{selectedTask.invoices.reduce((s, i) => s + i.amount, 0).toLocaleString()}
+                  </div>
+                </div>
+                
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
+                  <table className="w-full text-right text-sm">
+                    <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-4 font-medium">תיאור הוצאה</th>
+                        <th className="py-2.5 px-4 font-medium">סכום</th>
+                        <th className="py-2.5 px-4 font-medium text-center">אסמכתא</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedTask.invoices.map(inv => (
+                        <tr key={inv.id}>
+                          <td className="py-3 px-4 font-medium text-slate-700">{inv.desc}</td>
+                          <td className="py-3 px-4 text-slate-600">₪{inv.amount.toLocaleString()}</td>
+                          <td className="py-3 px-4 text-center">
+                            {inv.receiptFile ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                                <CheckCircle className="w-3 h-3" /> הועלה
+                              </span>
+                            ) : (
+                              userRole === 'admin' ? (
+                                <button onClick={() => handleInvoiceReceiptUpload(inv.id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center justify-center gap-1 mx-auto">
+                                  <Upload className="w-3 h-3" /> צרף קבלה
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-400">חסר</span>
+                              )
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {selectedTask.invoices.length === 0 && (
+                        <tr>
+                          <td colSpan="3" className="py-6 text-center text-slate-400">אין הוצאות רשומות לספר זה.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {userRole === 'admin' && (
+                  <form onSubmit={handleAddInvoice} className="flex gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <input 
+                      required type="text" placeholder="תיאור (למשל: עריכה לשונית)" 
+                      value={newInvoice.desc} onChange={e => setNewInvoice({...newInvoice, desc: e.target.value})}
+                      className="flex-1 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
+                    />
+                    <input 
+                      required type="number" placeholder="סכום (₪)" 
+                      value={newInvoice.amount} onChange={e => setNewInvoice({...newInvoice, amount: e.target.value})}
+                      className="w-28 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" 
+                    />
+                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                      הוסף
+                    </button>
+                  </form>
+                )}
+              </section>
             </div>
           </div>
         </div>
