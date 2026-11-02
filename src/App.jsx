@@ -161,9 +161,9 @@ const validUsers = [
 
 export default function PublisherApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [userRole, setUserRole] = useState(null); // 'admin' | 'viewer' | null
-  const [currentUserName, setCurrentUserName] = useState(''); // שם המשתמש המחובר
-  const [dashboardPeriod, setDashboardPeriod] = useState('monthly'); // 'monthly' | 'yearly'
+  const [userRole, setUserRole] = useState(null); 
+  const [currentUserName, setCurrentUserName] = useState(''); 
+  const [dashboardPeriod, setDashboardPeriod] = useState('monthly'); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // --- Auth States ---
@@ -179,14 +179,21 @@ export default function PublisherApp() {
   const [newSupplier, setNewSupplier] = useState({ name: '', type: 'רשת קמעונאית', contact: '', phone: '', email: '', status: 'פעיל - יש הסכם' });
   const [selectedSupplierForStock, setSelectedSupplierForStock] = useState(null);
 
-  // --- Inventory New Book & Manual Update States ---
+  // --- Inventory Modals (Add, Edit, Update) ---
   const [isUpdateStockModalOpen, setIsUpdateStockModalOpen] = useState(false);
   const [stockUpdateForm, setStockUpdateForm] = useState({ bookId: '', amount: 0 });
-  const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
-  const [newBookForm, setNewBookForm] = useState({
+  
+  const initialBookFormState = {
     title: '', author: '', isbn: '', stock: 0, threshold: 50,
-    prices: { general: 0, supplier: 0, yeshiva: 0 }
-  });
+    prices: { general: 0, supplier: 0, yeshiva: 0 },
+    breakdown: []
+  };
+
+  const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
+  const [newBookForm, setNewBookForm] = useState(initialBookFormState);
+
+  const [isEditBookModalOpen, setIsEditBookModalOpen] = useState(false);
+  const [editingBook, setEditingBook] = useState(null);
 
   // --- Kanban State ---
   const [tasks, setTasks] = useState(initialKanbanTasks);
@@ -240,20 +247,68 @@ export default function PublisherApp() {
     setStockUpdateForm({ bookId: '', amount: 0 });
   };
 
+  // Add Book Handlers
   const handleAddBook = (e) => {
     e.preventDefault();
     const newBook = {
       ...newBookForm,
       id: Date.now(),
-      breakdown: [] // Starts with no stock assigned to specific suppliers
     };
     setInventoryList([...inventoryList, newBook]);
     setIsAddBookModalOpen(false);
+    setNewBookForm(initialBookFormState);
+  };
+
+  const handleAddBookBreakdownRow = () => {
     setNewBookForm({
-      title: '', author: '', isbn: '', stock: 0, threshold: 50,
-      prices: { general: 0, supplier: 0, yeshiva: 0 }
+      ...newBookForm,
+      breakdown: [...newBookForm.breakdown, { supplier: '', amount: 0 }]
     });
   };
+
+  const handleUpdateBookBreakdownRow = (index, field, value) => {
+    const updatedBreakdown = [...newBookForm.breakdown];
+    updatedBreakdown[index][field] = field === 'amount' ? Number(value) : value;
+    setNewBookForm({ ...newBookForm, breakdown: updatedBreakdown });
+  };
+
+  const handleRemoveBookBreakdownRow = (index) => {
+    const updatedBreakdown = newBookForm.breakdown.filter((_, i) => i !== index);
+    setNewBookForm({ ...newBookForm, breakdown: updatedBreakdown });
+  };
+
+  // Edit Book Handlers
+  const openEditBook = (book) => {
+    // Deep copy to prevent mutating state directly during typing
+    setEditingBook(JSON.parse(JSON.stringify(book))); 
+    setIsEditBookModalOpen(true);
+  };
+
+  const handleEditBookSubmit = (e) => {
+    e.preventDefault();
+    setInventoryList(inventoryList.map(b => b.id === editingBook.id ? editingBook : b));
+    setIsEditBookModalOpen(false);
+    setEditingBook(null);
+  };
+
+  const handleEditBookBreakdownRow = () => {
+    setEditingBook({
+      ...editingBook,
+      breakdown: [...editingBook.breakdown, { supplier: '', amount: 0 }]
+    });
+  };
+
+  const handleUpdateEditBookBreakdownRow = (index, field, value) => {
+    const updatedBreakdown = [...editingBook.breakdown];
+    updatedBreakdown[index][field] = field === 'amount' ? Number(value) : value;
+    setEditingBook({ ...editingBook, breakdown: updatedBreakdown });
+  };
+
+  const handleRemoveEditBookBreakdownRow = (index) => {
+    const updatedBreakdown = editingBook.breakdown.filter((_, i) => i !== index);
+    setEditingBook({ ...editingBook, breakdown: updatedBreakdown });
+  };
+
 
   const handleDeleteBook = (id) => {
     if (window.confirm("האם אתה בטוח שברצונך למחוק ספר זה מהמלאי לצמיתות?")) {
@@ -449,7 +504,7 @@ export default function PublisherApp() {
                 key={item.id}
                 onClick={() => {
                   setActiveTab(item.id);
-                  setIsMobileMenuOpen(false); // Close menu on mobile after selection
+                  setIsMobileMenuOpen(false);
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive 
@@ -579,7 +634,7 @@ export default function PublisherApp() {
               {userRole === 'admin' && (
                 <div className="flex justify-end mb-4">
                   <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2">
-                    <Plus className="w-4 h-4" /> הוסף ספר חדש
+                    <Plus className="w-4 h-4" /> הוסף פרויקט הפקה חדש
                   </button>
                 </div>
               )}
@@ -678,7 +733,7 @@ export default function PublisherApp() {
                           onClick={() => setIsUpdateStockModalOpen(true)}
                           className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2.5 rounded-lg font-medium text-xs md:text-sm transition-colors flex items-center justify-center gap-2"
                         >
-                          <Edit className="w-4 h-4" />
+                          <RefreshCw className="w-4 h-4" />
                           עדכון ידני
                         </button>
                         <button 
@@ -753,7 +808,14 @@ export default function PublisherApp() {
                             )}
                           </td>
                           {userRole === 'admin' && (
-                            <td className="py-4 px-4 md:px-6 text-center print:hidden">
+                            <td className="py-4 px-4 md:px-6 text-center print:hidden flex items-center justify-center gap-1">
+                              <button 
+                                onClick={() => openEditBook(book)} 
+                                className="text-slate-400 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition-colors"
+                                title="ערוך ספר"
+                              >
+                                <Edit className="w-4 h-4 md:w-5 md:h-5" />
+                              </button>
                               <button 
                                 onClick={() => handleDeleteBook(book.id)} 
                                 className="text-slate-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
@@ -922,7 +984,7 @@ export default function PublisherApp() {
                       <tr>
                         <th className="py-3 px-4 font-medium">נמען / משפיען</th>
                         <th className="py-3 px-4 font-medium">ספר נשלח</th>
-                        <th className="py-3 px-4 font-medium">סטטוס</th>
+                        <th className="py-3 px-4 font-medium text-center">סטטוס</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -930,7 +992,7 @@ export default function PublisherApp() {
                         <tr key={pr.id} className="hover:bg-slate-50">
                           <td className="py-3 px-4 font-medium text-slate-700">{pr.recipient}</td>
                           <td className="py-3 px-4 text-slate-500">{pr.book}</td>
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-4 text-center">
                             <span className={`inline-flex px-2 py-1 rounded-md text-[10px] md:text-xs font-medium ${
                               pr.status === 'פורסמה ביקורת' ? 'bg-emerald-100 text-emerald-700' : 
                               pr.status === 'נמסר ליעד' ? 'bg-blue-100 text-blue-700' : 
@@ -967,7 +1029,6 @@ export default function PublisherApp() {
                         {int.logo}
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
-                        {/* Toggle Switch */}
                         <button 
                           onClick={() => handleToggleIntegration(int.id)}
                           disabled={userRole !== 'admin'}
@@ -1025,11 +1086,11 @@ export default function PublisherApp() {
               <form onSubmit={handleAddSupplier} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">שם הספק/רשת</label>
-                  <input required type="text" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white text-sm" />
+                  <input required type="text" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">סוג ספק</label>
-                  <select value={newSupplier.type} onChange={e => setNewSupplier({...newSupplier, type: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white text-sm">
+                  <select value={newSupplier.type} onChange={e => setNewSupplier({...newSupplier, type: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white text-sm">
                     <option>רשת קמעונאית</option>
                     <option>הפצה</option>
                     <option>מחסן לוגיסטי</option>
@@ -1038,7 +1099,7 @@ export default function PublisherApp() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">סטטוס שיתוף פעולה</label>
-                  <select value={newSupplier.status} onChange={e => setNewSupplier({...newSupplier, status: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white text-sm">
+                  <select value={newSupplier.status} onChange={e => setNewSupplier({...newSupplier, status: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white text-sm">
                     <option>פעיל - יש הסכם</option>
                     <option>ללא הסכם מכירה</option>
                     <option>ממתין לספרים</option>
@@ -1047,15 +1108,15 @@ export default function PublisherApp() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">איש קשר</label>
-                  <input required type="text" value={newSupplier.contact} onChange={e => setNewSupplier({...newSupplier, contact: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white text-sm" />
+                  <input required type="text" value={newSupplier.contact} onChange={e => setNewSupplier({...newSupplier, contact: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">טלפון</label>
-                  <input required type="text" value={newSupplier.phone} onChange={e => setNewSupplier({...newSupplier, phone: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white text-sm" dir="ltr" placeholder="05X-XXXXXXX" />
+                  <input required type="text" value={newSupplier.phone} onChange={e => setNewSupplier({...newSupplier, phone: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white text-sm" dir="ltr" placeholder="05X-XXXXXXX" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">דוא״ל</label>
-                  <input required type="email" value={newSupplier.email} onChange={e => setNewSupplier({...newSupplier, email: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white text-sm" dir="ltr" />
+                  <input required type="email" value={newSupplier.email} onChange={e => setNewSupplier({...newSupplier, email: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white text-sm" dir="ltr" />
                 </div>
                 <div className="pt-2">
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-medium transition-colors">שמור ספק</button>
@@ -1186,7 +1247,7 @@ export default function PublisherApp() {
                     <input type="text" value={newBookForm.isbn} onChange={e => setNewBookForm({...newBookForm, isbn: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">כמות התחלתית</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">סה"כ במלאי</label>
                     <input required type="number" min="0" value={newBookForm.stock} onChange={e => setNewBookForm({...newBookForm, stock: Number(e.target.value)})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" />
                   </div>
                   <div>
@@ -1213,8 +1274,158 @@ export default function PublisherApp() {
                   </div>
                 </div>
 
+                <div className="pt-4 mt-2 border-t border-slate-100">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-bold text-slate-800">פיזור מלאי אצל ספקים (אופציונלי)</h4>
+                    <button 
+                      type="button" 
+                      onClick={handleAddBookBreakdownRow}
+                      className="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> הוסף ספק לפיזור
+                    </button>
+                  </div>
+                  
+                  {newBookForm.breakdown.length === 0 ? (
+                    <p className="text-xs text-slate-400">לא נבחרו ספקים. כל המלאי ייחשב ככללי.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {newBookForm.breakdown.map((item, idx) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <select 
+                            required
+                            value={item.supplier} 
+                            onChange={(e) => handleUpdateBookBreakdownRow(idx, 'supplier', e.target.value)}
+                            className="flex-1 p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"
+                          >
+                            <option value="" disabled>-- בחר ספק / מחסן --</option>
+                            {suppliersList.map(sup => (
+                              <option key={sup.id} value={sup.name}>{sup.name}</option>
+                            ))}
+                          </select>
+                          <input 
+                            required type="number" min="1" placeholder="כמות"
+                            value={item.amount || ''}
+                            onChange={(e) => handleUpdateBookBreakdownRow(idx, 'amount', e.target.value)}
+                            className="w-24 p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500" dir="ltr"
+                          />
+                          <button type="button" onClick={() => handleRemoveBookBreakdownRow(idx)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-medium mt-6">
-                  הוסף ספר למלאי
+                  שמור ספר למלאי
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Existing Book Modal */}
+      {isEditBookModalOpen && editingBook && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]" dir="rtl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <h3 className="font-bold text-lg text-slate-800">עריכת ספר: {editingBook.title}</h3>
+              <button onClick={() => {setIsEditBookModalOpen(false); setEditingBook(null);}} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md shadow-sm border border-slate-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <form onSubmit={handleEditBookSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">שם הספר</label>
+                    <input required type="text" value={editingBook.title} onChange={e => setEditingBook({...editingBook, title: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">מחבר</label>
+                    <input required type="text" value={editingBook.author} onChange={e => setEditingBook({...editingBook, author: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">דאנאק (ISBN)</label>
+                    <input type="text" value={editingBook.isbn} onChange={e => setEditingBook({...editingBook, isbn: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">סה"כ במלאי</label>
+                    <input required type="number" min="0" value={editingBook.stock} onChange={e => setEditingBook({...editingBook, stock: Number(e.target.value)})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">רף התראה (מלאי נמוך)</label>
+                    <input required type="number" min="0" value={editingBook.threshold} onChange={e => setEditingBook({...editingBook, threshold: Number(e.target.value)})} className="w-full p-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" />
+                  </div>
+                </div>
+                
+                <div className="pt-4 mt-2 border-t border-slate-100">
+                  <h4 className="text-sm font-bold text-slate-800 mb-3">מחירונים (₪)</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">מחיר כללי</label>
+                      <input required type="number" min="0" value={editingBook.prices.general} onChange={e => setEditingBook({...editingBook, prices: {...editingBook.prices, general: Number(e.target.value)}})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">מחיר ספק</label>
+                      <input required type="number" min="0" value={editingBook.prices.supplier} onChange={e => setEditingBook({...editingBook, prices: {...editingBook.prices, supplier: Number(e.target.value)}})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">מחיר ישיבות</label>
+                      <input required type="number" min="0" value={editingBook.prices.yeshiva} onChange={e => setEditingBook({...editingBook, prices: {...editingBook.prices, yeshiva: Number(e.target.value)}})} className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" dir="ltr" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-2 border-t border-slate-100">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-bold text-slate-800">פיזור מלאי אצל ספקים</h4>
+                    <button 
+                      type="button" 
+                      onClick={handleEditBookBreakdownRow}
+                      className="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> הוסף ספק לפיזור
+                    </button>
+                  </div>
+                  
+                  {editingBook.breakdown.length === 0 ? (
+                    <p className="text-xs text-slate-400">לא נבחרו ספקים. כל המלאי ייחשב ככללי.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {editingBook.breakdown.map((item, idx) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <select 
+                            required
+                            value={item.supplier} 
+                            onChange={(e) => handleUpdateEditBookBreakdownRow(idx, 'supplier', e.target.value)}
+                            className="flex-1 p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"
+                          >
+                            <option value="" disabled>-- בחר ספק / מחסן --</option>
+                            {suppliersList.map(sup => (
+                              <option key={sup.id} value={sup.name}>{sup.name}</option>
+                            ))}
+                          </select>
+                          <input 
+                            required type="number" min="1" placeholder="כמות"
+                            value={item.amount || ''}
+                            onChange={(e) => handleUpdateEditBookBreakdownRow(idx, 'amount', e.target.value)}
+                            className="w-24 p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500" dir="ltr"
+                          />
+                          <button type="button" onClick={() => handleRemoveEditBookBreakdownRow(idx)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-medium mt-6">
+                  שמור שינויים
                 </button>
               </form>
             </div>
