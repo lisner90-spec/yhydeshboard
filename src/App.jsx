@@ -62,7 +62,8 @@ const initialSuppliers = [
   { name: 'מחסן ראשי - פתח תקווה', type: 'מחסן לוגיסטי', contact: 'אבי כהן', phone: '050-1234567', email: 'avi@publisher-logistics.co.il', status: 'פעיל - יש הסכם' },
   { name: 'צומת ספרים - מרלו״ג', type: 'רשת קמעונאית', contact: 'רונית לוי', phone: '052-7654321', email: 'ronit@zomet.co.il', status: 'פעיל - יש הסכם' },
   { name: 'סטימצקי - הפצה', type: 'רשת קמעונאית', contact: 'דני אלמגור', phone: '054-9876543', email: 'dani@steimatzky.co.il', status: 'ממתין לספרים' },
-  { name: 'דפוס קורן בע"מ', type: 'בית דפוס', contact: 'שמואל קורן', phone: '02-6543210', email: 'office@koren-print.co.il', status: 'פעיל - יש הסכם' }
+  { name: 'דפוס קורן בע"מ', type: 'בית דפוס', contact: 'שמואל קורן', phone: '02-6543210', email: 'office@koren-print.co.il', status: 'פעיל - יש הסכם' },
+  { name: 'חנויות עצמאיות (הפצה מרוכזת)', type: 'הפצה', contact: 'יעל מזרחי', phone: '050-9988776', email: 'indie-dist@publisher.co.il', status: 'אין שיתוף פעולה' }
 ];
 
 const getStatusColor = (status) => {
@@ -279,6 +280,7 @@ export default function PublisherApp() {
           for (const item of initialCampaigns) await addDoc(getCollRef('campaigns'), item);
           for (const item of initialPrCopies) await addDoc(getCollRef('prCopies'), item);
           for (const item of initialTasksFlat) await addDoc(getCollRef('tasks'), item);
+          for (const item of initialValidUsers) await addDoc(getCollRef('users'), item);
         }
         return true;
       } catch (e) {
@@ -302,6 +304,9 @@ export default function PublisherApp() {
         unsubs.push(onSnapshot(getCollRef('campaigns'), snap => setCampaignsList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('prCopies'), snap => setPrCopies(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('tasks'), snap => setTasksList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('users'), snap => {
+          if (!snap.empty) setUsersList(snap.docs.map(d => ({id: d.id, ...d.data()})));
+        }, handleDbError));
         unsubs.push(onSnapshot(getDocRef('globals', 'stats'), snap => {
           if (snap.exists()) setStatsData(snap.data());
         }, handleDbError));
@@ -323,19 +328,32 @@ export default function PublisherApp() {
       setUserRole(user.role);
       setCurrentUserName(user.name);
       setLoginError('');
+      showToast(`ברוך הבא, ${user.name}`);
     } else {
       setLoginError('שם משתמש או סיסמה שגויים. נסה שוב.');
     }
   };
 
   // User Management
-  const handleCreateUser = (e) => {
+  const handleCreateUser = async (e) => {
     e.preventDefault();
+    // הגנה קשיחה נוספת - רק admin ראשי יכול ליצור
+    if (username !== 'admin') {
+      showToast("שגיאת הרשאות: רק מנהל ראשי מורשה להוסיף משתמשים.", "error");
+      return;
+    }
+
     if (!newUser.username || !newUser.password || !newUser.name) return;
     
-    setUsersList([...usersList, { 
-      username: newUser.username, password: newUser.password, role: newUser.role, name: newUser.name 
-    }]);
+    const userObj = {
+      username: newUser.username, password: newUser.password, role: newUser.role, name: newUser.name, email: newUser.email || ''
+    };
+
+    if (db) {
+      await addDoc(getCollRef('users'), userObj);
+    } else {
+      setUsersList([...usersList, userObj]);
+    }
 
     if (newUser.email) {
       const subject = "פרטי התחברות למערכת ניהול הוצאה לאור";
@@ -353,10 +371,17 @@ export default function PublisherApp() {
   };
 
   const handleRemoveUser = (usernameToRemove) => {
+    // הגנה קשיחה - רק admin ראשי יכול למחוק
+    if (username !== 'admin') {
+      showToast("שגיאת הרשאות: רק מנהל ראשי מורשה למחוק משתמשים.", "error");
+      return;
+    }
+
     if(usernameToRemove === 'admin') {
       showToast("לא ניתן למחוק את משתמש המנהל הראשי.", "error");
       return;
     }
+
     setConfirmDialog({
       message: `האם אתה בטוח שברצונך למחוק את המשתמש ${usernameToRemove}?`,
       onConfirm: async () => {
@@ -377,17 +402,34 @@ export default function PublisherApp() {
     return Number(book.publisherStock || 0) + suppliersTotal;
   };
 
+  // Export CSV המורחב כולל כל הנתונים 
   const handleExportCSV = () => {
-    const headers = ['שם הספר', 'מחבר', 'דאנאק', 'מלאי בהוצאה', 'סה"כ במלאי כללי'];
-    const rows = inventoryList.map(b => [b.title, b.author, b.isbn, b.publisherStock, calculateTotalStock(b)]);
+    const headers = ['שם הספר', 'מחבר', 'דאנאק (ISBN)', 'מחיר צרכן (₪)', 'מחיר ספק (₪)', 'מחיר מיוחד (₪)', 'במחסן ההוצאה', 'פיזור אצל ספקים', 'סה"כ זמין במלאי'];
+    
+    const rows = inventoryList.map(b => {
+      const breakdownText = (b.breakdown || []).map(sup => `${sup.supplier}: ${sup.amount}`).join(' | ');
+      return [
+        `"${b.title}"`,
+        `"${b.author}"`,
+        `"${b.isbn}"`,
+        b.prices?.general || 0,
+        b.prices?.supplier || 0,
+        b.prices?.yeshiva || 0,
+        b.publisherStock || 0,
+        `"${breakdownText || 'ללא'}"`,
+        calculateTotalStock(b)
+      ];
+    });
+
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "inventory_report.csv");
+    link.setAttribute("download", "inventory_report_detailed.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showToast("הדוח המלא יוצא לאקסל", "success");
   };
 
   // Dashboard Edit
@@ -605,9 +647,10 @@ export default function PublisherApp() {
     }, 1500);
   };
 
+  // Get Stock specifically for Supplier Modal
   const getSupplierStock = (supplierName) => {
     return inventoryList.reduce((acc, book) => {
-      const found = book.breakdown.find(b => b.supplier === supplierName);
+      const found = (book.breakdown || []).find(b => b.supplier === supplierName);
       if (found && found.amount > 0) {
         acc.push({ title: book.title, author: book.author, amount: found.amount, isbn: book.isbn });
       }
@@ -761,7 +804,8 @@ export default function PublisherApp() {
           </div>
           <div className="flex items-center gap-2 md:gap-4">
             <div className="hidden md:block text-sm text-slate-500">שלום, <span className="font-semibold text-slate-700">{currentUserName}</span></div>
-            {userRole === 'admin' && (
+            {/* רק מנהל ראשי יכול לנהל משתמשים */}
+            {username === 'admin' && (
               <button onClick={() => setIsUserManageModalOpen(true)} className="text-xs md:text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1.5 md:px-3 md:py-1.5 rounded-lg transition-colors border border-transparent flex items-center gap-1.5">
                 <UserCog className="w-4 h-4" /> ניהול משתמשים
               </button>
@@ -1095,7 +1139,54 @@ export default function PublisherApp() {
       </main>
 
       {/* --- MODALS --- */}
-      {isUserManageModalOpen && userRole === 'admin' && (
+
+      {/* חלון צפייה במלאי ספק */}
+      {selectedSupplierForStock && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Package className="w-5 h-5 text-indigo-600" /> מלאי אצל: {selectedSupplierForStock.name}</h3>
+                <p className="text-sm text-slate-500">{selectedSupplierForStock.type}</p>
+              </div>
+              <button onClick={() => setSelectedSupplierForStock(null)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-md shadow-sm border border-slate-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {getSupplierStock(selectedSupplierForStock.name).length > 0 ? (
+                <div className="border border-slate-100 rounded-xl overflow-hidden">
+                  <table className="w-full text-right">
+                    <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 font-medium">שם הספר</th>
+                        <th className="py-3 px-4 font-medium">מחבר</th>
+                        <th className="py-3 px-4 font-medium text-center">כמות במלאי</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {getSupplierStock(selectedSupplierForStock.name).map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="py-3 px-4 font-medium text-slate-700">{item.title}</td>
+                          <td className="py-3 px-4 text-slate-600 text-sm">{item.author}</td>
+                          <td className="py-3 px-4 font-bold text-indigo-600 text-center">{item.amount.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 font-medium">אין כרגע מלאי המשויך לספק זה במערכת.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isUserManageModalOpen && username === 'admin' && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
             <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
@@ -1131,7 +1222,7 @@ export default function PublisherApp() {
                     <label className="block text-xs font-medium text-slate-700 mb-1">הרשאה</label>
                     <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full p-2 border rounded-lg bg-white text-sm">
                       <option value="viewer">צופה (קריאה בלבד)</option>
-                      <option value="admin">מנהל מערכת (גישה מלאה)</option>
+                      <option value="admin">מנהל מערכת</option>
                     </select>
                   </div>
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-medium mt-2 flex justify-center items-center gap-2">
@@ -1373,7 +1464,6 @@ export default function PublisherApp() {
             <div className="p-4 md:p-6 overflow-y-auto">
               <form onSubmit={handleAddBook} className="space-y-5 md:space-y-6">
                 
-                {/* מידע כללי */}
                 <div>
                   <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">פרטי הספר</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
@@ -1384,7 +1474,6 @@ export default function PublisherApp() {
                   </div>
                 </div>
 
-                {/* מהדורות הדפסה */}
                 <div className="bg-indigo-50/50 p-3 md:p-4 rounded-xl border border-indigo-100">
                   <div className="flex justify-between items-center mb-3">
                     <h4 className="font-bold text-sm md:text-base text-indigo-900">מעקב מהדורות</h4>
@@ -1406,7 +1495,6 @@ export default function PublisherApp() {
                   </div>
                 </div>
 
-                {/* חלוקת מלאי עכשווית */}
                 <div className="bg-emerald-50/50 p-3 md:p-4 rounded-xl border border-emerald-100">
                   <h4 className="font-bold text-sm md:text-base text-emerald-900 mb-2 md:mb-3 border-b border-emerald-100 pb-2">חלוקת מלאי נוכחית (פיזי)</h4>
                   
@@ -1443,7 +1531,6 @@ export default function PublisherApp() {
                   )}
                 </div>
 
-                {/* מחירונים */}
                 <div>
                   <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">מחירונים (₪)</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1460,7 +1547,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Edit Existing Book Modal */}
       {isEditBookModalOpen && editingBook && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] md:max-h-[90vh]" dir="rtl">
@@ -1471,7 +1557,6 @@ export default function PublisherApp() {
             <div className="p-4 md:p-6 overflow-y-auto">
               <form onSubmit={handleEditBookSubmit} className="space-y-5 md:space-y-6">
                 
-                {/* מידע כללי */}
                 <div>
                    <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">פרטי הספר</h4>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
@@ -1482,7 +1567,6 @@ export default function PublisherApp() {
                    </div>
                 </div>
 
-                {/* מהדורות הדפסה */}
                 <div className="bg-indigo-50/50 p-3 md:p-4 rounded-xl border border-indigo-100">
                   <div className="flex justify-between items-center mb-3">
                     <h4 className="font-bold text-sm md:text-base text-indigo-900">מהדורות והדפסות</h4>
@@ -1504,7 +1588,6 @@ export default function PublisherApp() {
                   </div>
                 </div>
 
-                {/* חלוקת מלאי עכשווית */}
                 <div className="bg-emerald-50/50 p-3 md:p-4 rounded-xl border border-emerald-100">
                   <h4 className="font-bold text-sm md:text-base text-emerald-900 mb-2 md:mb-3 border-b border-emerald-100 pb-2">חלוקת מלאי פיזי</h4>
                   
@@ -1537,7 +1620,6 @@ export default function PublisherApp() {
                   </div>
                 </div>
 
-                {/* מחירונים עריכה */}
                 <div>
                    <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">מחירונים (₪)</h4>
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1554,7 +1636,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Manual Stock Update Modal */}
       {isUpdateStockModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
@@ -1568,14 +1649,29 @@ export default function PublisherApp() {
               <form onSubmit={handleManualStockUpdate} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">בחר ספר (מעדכן את מחסן ההוצאה)</label>
-                  <select required value={stockUpdateForm.bookId} onChange={e => setStockUpdateForm({...stockUpdateForm, bookId: e.target.value})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 text-sm">
+                  <select 
+                    required 
+                    value={stockUpdateForm.bookId} 
+                    onChange={e => setStockUpdateForm({...stockUpdateForm, bookId: e.target.value})}
+                    className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50 text-sm"
+                  >
                     <option value="" disabled>-- בחר מספרייה --</option>
-                    {inventoryList.map(book => <option key={book.id} value={book.id}>{book.title} (במחסן ההוצאה: {book.publisherStock})</option>)}
+                    {inventoryList.map(book => (
+                      <option key={book.id} value={book.id}>{book.title} (במחסן ההוצאה: {book.publisherStock})</option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">כמות לעדכון</label>
-                  <input required type="number" value={stockUpdateForm.amount} onChange={e => setStockUpdateForm({...stockUpdateForm, amount: e.target.value})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" placeholder="למשל: 50 או -20" dir="ltr" />
+                  <input 
+                    required 
+                    type="number" 
+                    value={stockUpdateForm.amount} 
+                    onChange={e => setStockUpdateForm({...stockUpdateForm, amount: e.target.value})}
+                    className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                    placeholder="למשל: 50 או -20"
+                    dir="ltr"
+                  />
                   <p className="text-xs text-slate-400 mt-1">הזן מספר חיובי להוספה למלאי, או שלילי להחסרה מ"מחסן ההוצאה".</p>
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-medium mt-2 md:mt-4">
@@ -1587,7 +1683,6 @@ export default function PublisherApp() {
         </div>
       )}
 
-      {/* Task (Book Production) Modal */}
       {selectedTask && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full h-[90vh] md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200" dir="rtl">
@@ -1603,7 +1698,6 @@ export default function PublisherApp() {
             
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8">
               
-              {/* Files Section */}
               <section>
                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                   <Paperclip className="w-5 h-5 text-indigo-600" />
@@ -1611,7 +1705,6 @@ export default function PublisherApp() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                   
-                  {/* Cover */}
                   <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
                     <div className={`p-3 rounded-full ${selectedTask.coverFile ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
                       <ImageIcon className="w-6 h-6" />
@@ -1629,7 +1722,6 @@ export default function PublisherApp() {
                     )}
                   </div>
 
-                  {/* Manuscript */}
                   <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
                     <div className={`p-3 rounded-full ${selectedTask.bookFile ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
                       <FileText className="w-6 h-6" />
@@ -1647,7 +1739,6 @@ export default function PublisherApp() {
                     )}
                   </div>
 
-                  {/* Dedications */}
                   <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 bg-slate-50/50">
                     <div className={`p-3 rounded-full ${selectedTask.dedicationFile ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}>
                       <Users className="w-6 h-6" />
@@ -1667,7 +1758,6 @@ export default function PublisherApp() {
                 </div>
               </section>
 
-              {/* Invoices Section */}
               <section>
                 <div className="flex justify-between items-end mb-4">
                   <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
