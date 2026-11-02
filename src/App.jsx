@@ -31,7 +31,10 @@ import {
   Phone,
   Menu,
   Trash2,
-  Settings2
+  Settings2,
+  UserPlus,
+  Send,
+  UserCog
 } from 'lucide-react';
 
 // --- Mock Data ---
@@ -124,8 +127,7 @@ const initialInventory = [
   }
 ];
 
-// --- רשימת משתמשים מורשית ---
-const validUsers = [
+const initialValidUsers = [
   { username: 'admin', password: 'admin2026', role: 'admin', name: 'מנהל' },
   { username: 'view', password: 'view2026', role: 'viewer', name: 'צופה' }
 ];
@@ -137,10 +139,13 @@ export default function PublisherApp() {
   const [dashboardPeriod, setDashboardPeriod] = useState('monthly'); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // --- Auth States ---
+  // --- Auth & Users States ---
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [usersList, setUsersList] = useState(initialValidUsers);
+  const [isUserManageModalOpen, setIsUserManageModalOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ name: '', username: '', password: '', role: 'viewer', email: '' });
 
   // --- Dashboard Editing States ---
   const [statsData, setStatsData] = useState(initialStatsData);
@@ -155,7 +160,16 @@ export default function PublisherApp() {
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [selectedSupplierForStock, setSelectedSupplierForStock] = useState(null);
 
+  // --- Supplier Invoices / Orders State ---
+  const [isSupplierInvoiceModalOpen, setIsSupplierInvoiceModalOpen] = useState(false);
+  const [invoiceSupplier, setInvoiceSupplier] = useState(null);
+  const [invoiceItems, setInvoiceItems] = useState([]);
+
   // --- Marketing & PR States ---
+  const [campaignsList, setCampaignsList] = useState(marketingData.campaigns);
+  const [isEditCampaignModalOpen, setIsEditCampaignModalOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState(null);
+
   const [prCopies, setPrCopies] = useState(marketingData.prCopies);
   const [isEditPrModalOpen, setIsEditPrModalOpen] = useState(false);
   const [editingPr, setEditingPr] = useState(null);
@@ -194,13 +208,55 @@ export default function PublisherApp() {
   // --- Handlers ---
   const handleLogin = (e) => {
     e.preventDefault();
-    const user = validUsers.find(u => u.username === username && u.password === password);
+    const user = usersList.find(u => u.username === username && u.password === password);
     if (user) {
       setUserRole(user.role);
       setCurrentUserName(user.name);
       setLoginError('');
     } else {
       setLoginError('שם משתמש או סיסמה שגויים. נסה שוב.');
+    }
+  };
+
+  // User Management Handlers
+  const handleCreateUser = (e) => {
+    e.preventDefault();
+    if (!newUser.username || !newUser.password || !newUser.name) return;
+    
+    // Add to state
+    setUsersList([...usersList, { 
+      username: newUser.username, 
+      password: newUser.password, 
+      role: newUser.role, 
+      name: newUser.name 
+    }]);
+
+    // Send Email via Mailto
+    if (newUser.email) {
+      const subject = encodeURIComponent("פרטי התחברות למערכת ניהול הוצאה לאור");
+      const body = encodeURIComponent(
+        `שלום ${newUser.name},\n\n` +
+        `נוצר עבורך משתמש חדש למערכת ניהול ההוצאה לאור.\n` +
+        `להלן פרטי ההתחברות שלך:\n\n` +
+        `שם משתמש: ${newUser.username}\n` +
+        `סיסמה: ${newUser.password}\n\n` +
+        `הרשאה: ${newUser.role === 'admin' ? 'מנהל מערכת' : 'צופה (קריאה בלבד)'}\n\n` +
+        `בברכה,\nהנהלת המערכת`
+      );
+      window.location.href = `mailto:${newUser.email}?subject=${subject}&body=${body}`;
+    }
+
+    setNewUser({ name: '', username: '', password: '', role: 'viewer', email: '' });
+    setIsUserManageModalOpen(false);
+  };
+
+  const handleRemoveUser = (usernameToRemove) => {
+    if(usernameToRemove === 'admin') {
+      alert("לא ניתן למחוק את משתמש המנהל הראשי.");
+      return;
+    }
+    if(window.confirm(`האם למחוק את המשתמש ${usernameToRemove}?`)) {
+      setUsersList(usersList.filter(u => u.username !== usernameToRemove));
     }
   };
 
@@ -252,7 +308,74 @@ export default function PublisherApp() {
     setIsEditSupplierModalOpen(false);
   };
 
-  // PR Handlers
+  // Supplier Invoices & Receipts Handlers
+  const openSupplierInvoice = (supplier) => {
+    setInvoiceSupplier(supplier);
+    setInvoiceItems([{ bookId: '', amount: 1, price: 0 }]);
+    setIsSupplierInvoiceModalOpen(true);
+  };
+
+  const handleInvoiceItemChange = (index, field, value) => {
+    const newItems = [...invoiceItems];
+    if (field === 'bookId') {
+      newItems[index].bookId = value;
+      // Auto-populate price
+      const book = inventoryList.find(b => b.id.toString() === value);
+      if (book) {
+        newItems[index].price = book.prices.supplier;
+      }
+    } else {
+      newItems[index][field] = Number(value);
+    }
+    setInvoiceItems(newItems);
+  };
+
+  const addInvoiceItemRow = () => {
+    setInvoiceItems([...invoiceItems, { bookId: '', amount: 1, price: 0 }]);
+  };
+
+  const removeInvoiceItemRow = (index) => {
+    setInvoiceItems(invoiceItems.filter((_, i) => i !== index));
+  };
+
+  const sendInvoiceEmail = () => {
+    if (!invoiceSupplier || !invoiceSupplier.email) {
+      alert("לספק זה לא מוגדרת כתובת דוא״ל במערכת.");
+      return;
+    }
+
+    let totalOrderPrice = 0;
+    let itemsText = invoiceItems.map(item => {
+      const book = inventoryList.find(b => b.id.toString() === item.bookId);
+      if (!book) return '';
+      const lineTotal = item.amount * item.price;
+      totalOrderPrice += lineTotal;
+      return `- ${book.title} | כמות: ${item.amount} | מחיר יחידה: ₪${item.price} | סה"כ שורה: ₪${lineTotal}`;
+    }).join('\n');
+
+    const subject = encodeURIComponent(`הזמנה / סיכום פרטי הפצה - ${invoiceSupplier.name}`);
+    const body = encodeURIComponent(
+      `שלום ${invoiceSupplier.contact},\n\n` +
+      `להלן סיכום הזמנת ספרים / תעודת משלוח מול ההוצאה לאור:\n\n` +
+      `${itemsText}\n\n` +
+      `--------------------------------\n` +
+      `סה"כ לתשלום / חיוב: ₪${totalOrderPrice.toLocaleString()}\n` +
+      `--------------------------------\n\n` +
+      `נא לאשר קבלת המייל וההזמנה.\n\nבברכה,\nהוצאה לאור.`
+    );
+
+    window.location.href = `mailto:${invoiceSupplier.email}?subject=${subject}&body=${body}`;
+    setIsSupplierInvoiceModalOpen(false);
+  };
+
+
+  // PR and Campaigns Handlers
+  const handleEditCampaignSubmit = (e) => {
+    e.preventDefault();
+    setCampaignsList(campaignsList.map(camp => camp.id === editingCampaign.id ? editingCampaign : camp));
+    setIsEditCampaignModalOpen(false);
+  };
+
   const handleEditPrSubmit = (e) => {
     e.preventDefault();
     setPrCopies(prCopies.map(pr => pr.id === editingPr.id ? editingPr : pr));
@@ -495,8 +618,18 @@ export default function PublisherApp() {
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden text-slate-500 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition-colors"><Menu className="w-6 h-6" /></button>
             <h2 className="text-lg md:text-2xl font-bold text-slate-800 truncate">{navItems.find(item => item.id === activeTab)?.label}</h2>
           </div>
-          <div className="flex items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             <div className="hidden md:block text-sm text-slate-500">שלום, <span className="font-semibold text-slate-700">{currentUserName}</span></div>
+            
+            {userRole === 'admin' && (
+              <button 
+                onClick={() => setIsUserManageModalOpen(true)} 
+                className="text-xs md:text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1.5 md:px-3 md:py-1.5 rounded-lg transition-colors border border-transparent flex items-center gap-1.5"
+              >
+                <UserCog className="w-4 h-4" /> ניהול משתמשים
+              </button>
+            )}
+
             <button onClick={() => { setUserRole(null); setCurrentUserName(''); setUsername(''); setPassword(''); setLoginError(''); }} className="text-xs md:text-sm font-medium text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1.5 md:px-3 md:py-1.5 rounded-lg transition-colors border border-transparent">התנתק</button>
             <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-bold text-sm md:text-base ${userRole === 'admin' ? 'bg-indigo-100 border-2 border-indigo-200 text-indigo-700' : 'bg-slate-100 border-2 border-slate-200 text-slate-600'}`}>{userRole === 'admin' ? 'מ' : 'צ'}</div>
           </div>
@@ -668,8 +801,11 @@ export default function PublisherApp() {
                       <div className="flex items-center gap-3 text-sm text-slate-600" dir="ltr"><Phone className="w-4 h-4 text-slate-400" /> {supplier.phone}</div>
                       <div className="flex items-center gap-3 text-sm text-slate-600"><FileText className="w-4 h-4 text-slate-400" /> {supplier.email}</div>
                     </div>
-                    <div className="pt-5 mt-4 border-t border-slate-50">
+                    <div className="pt-5 mt-4 border-t border-slate-50 flex gap-2 flex-col">
                       <button onClick={() => setSelectedSupplierForStock(supplier)} className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><Package className="w-4 h-4" /> צפה במלאי</button>
+                      {userRole === 'admin' && (
+                        <button onClick={() => openSupplierInvoice(supplier)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><Receipt className="w-4 h-4" /> הפק הזמנה / קבלה</button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -745,17 +881,24 @@ export default function PublisherApp() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 animate-in fade-in duration-300 w-full">
               {/* Marketing Campaigns */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col w-full overflow-hidden">
-                <div className="p-4 md:p-6 border-b border-slate-100"><h3 className="text-base md:text-lg font-bold flex items-center gap-2"><Megaphone className="w-5 h-5 text-indigo-600" /> קמפיינים</h3></div>
+                <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center">
+                  <h3 className="text-base md:text-lg font-bold flex items-center gap-2"><Megaphone className="w-5 h-5 text-indigo-600" /> קמפיינים</h3>
+                </div>
                 <div className="p-4 md:p-6 space-y-5 md:space-y-6">
-                  {marketingData.campaigns.map(camp => (
-                    <div key={camp.id} className="space-y-2">
+                  {campaignsList.map(camp => (
+                    <div key={camp.id} className="space-y-2 relative group">
                        <div className="flex justify-between items-center gap-2">
-                           <div className="font-bold text-xs md:text-sm text-slate-700 truncate">{camp.name}</div>
+                           <div className="font-bold text-xs md:text-sm text-slate-700 truncate pr-6">{camp.name}</div>
                            <div className="text-[10px] md:text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 md:py-1 rounded shrink-0">החזר: {camp.roas}</div>
+                           {userRole === 'admin' && (
+                             <button onClick={() => { setEditingCampaign(camp); setIsEditCampaignModalOpen(true); }} className="absolute right-0 top-0 p-1 text-slate-300 hover:text-indigo-600 bg-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
+                               <Edit className="w-4 h-4" />
+                             </button>
+                           )}
                        </div>
                        <div className="flex justify-between text-[10px] md:text-xs text-slate-500">
-                           <span>נוצל: ₪{camp.spent.toLocaleString()}</span>
-                           <span>מתוך ₪{camp.budget.toLocaleString()}</span>
+                           <span>נוצל: ₪{Number(camp.spent).toLocaleString()}</span>
+                           <span>מתוך ₪{Number(camp.budget).toLocaleString()}</span>
                        </div>
                        <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2"><div className="bg-indigo-500 h-1.5 md:h-2 rounded-full" style={{ width: `${(camp.spent/camp.budget)*100}%`}}></div></div>
                     </div>
@@ -861,6 +1004,127 @@ export default function PublisherApp() {
 
       {/* --- MODALS --- */}
       
+      {/* User Management Modal (Admin Only) */}
+      {isUserManageModalOpen && userRole === 'admin' && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <h3 className="font-bold text-base md:text-lg text-slate-800 flex items-center gap-2"><UserCog className="w-5 h-5 text-indigo-600" /> ניהול משתמשים והרשאות</h3>
+              <button onClick={() => setIsUserManageModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md shadow-sm border border-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="p-4 md:p-6 overflow-y-auto flex-1 flex flex-col lg:flex-row gap-6">
+              
+              {/* Existing Users List */}
+              <div className="flex-1">
+                <h4 className="font-bold text-sm text-slate-700 mb-3 border-b border-slate-100 pb-2">משתמשים פעילים</h4>
+                <div className="space-y-2">
+                  {usersList.map((u, idx) => (
+                    <div key={idx} className="bg-slate-50 border border-slate-100 p-3 rounded-lg flex justify-between items-center">
+                      <div>
+                        <div className="font-bold text-sm text-slate-800">{u.name}</div>
+                        <div className="text-xs text-slate-500 font-mono">@{u.username}</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] px-2 py-1 rounded font-medium ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
+                          {u.role === 'admin' ? 'מנהל' : 'צופה'}
+                        </span>
+                        <button onClick={() => handleRemoveUser(u.username)} className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add New User Form */}
+              <div className="flex-1 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                <h4 className="font-bold text-sm text-indigo-900 mb-3 flex items-center gap-2"><UserPlus className="w-4 h-4" /> יצירת משתמש חדש</h4>
+                <form onSubmit={handleCreateUser} className="space-y-3">
+                  <div><label className="block text-xs font-medium text-slate-700 mb-1">שם מלא</label><input required type="text" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} className="w-full p-2 border rounded-lg bg-white text-sm" placeholder="למשל: דנה לוי" /></div>
+                  <div><label className="block text-xs font-medium text-slate-700 mb-1">שם משתמש (באנגלית)</label><input required type="text" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} className="w-full p-2 border rounded-lg bg-white text-sm" dir="ltr" /></div>
+                  <div><label className="block text-xs font-medium text-slate-700 mb-1">סיסמה</label><input required type="text" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full p-2 border rounded-lg bg-white text-sm" dir="ltr" /></div>
+                  <div><label className="block text-xs font-medium text-slate-700 mb-1">אימייל (לשליחת פרטים)</label><input required type="email" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} className="w-full p-2 border rounded-lg bg-white text-sm" dir="ltr" placeholder="דוא״ל הנמען" /></div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">הרשאה</label>
+                    <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full p-2 border rounded-lg bg-white text-sm">
+                      <option value="viewer">צופה (קריאה בלבד)</option>
+                      <option value="admin">מנהל מערכת (גישה מלאה)</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-medium mt-2 flex justify-center items-center gap-2">
+                    <Send className="w-4 h-4" /> צור משתמש ושלח למייל
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Order/Invoice Modal */}
+      {isSupplierInvoiceModalOpen && invoiceSupplier && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <div>
+                <h3 className="font-bold text-base md:text-lg text-slate-800 flex items-center gap-2"><Receipt className="w-5 h-5 text-indigo-600" /> הפקת קבלה / הזמנה</h3>
+                <p className="text-sm text-slate-500">עבור הספק/רשת: <span className="font-bold text-slate-700">{invoiceSupplier.name}</span></p>
+              </div>
+              <button onClick={() => setIsSupplierInvoiceModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md shadow-sm border border-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="p-4 md:p-6 overflow-y-auto flex-1">
+              <div className="flex justify-between items-end mb-3">
+                <h4 className="font-bold text-sm text-slate-700">פירוט ספרים בהזמנה</h4>
+                <button type="button" onClick={addInvoiceItemRow} className="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1"><Plus className="w-3 h-3" /> הוסף שורה</button>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                {invoiceItems.map((item, idx) => (
+                  <div key={idx} className="flex flex-wrap md:flex-nowrap gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <select 
+                      value={item.bookId} 
+                      onChange={(e) => handleInvoiceItemChange(idx, 'bookId', e.target.value)}
+                      className="w-full md:flex-1 p-2 border border-slate-200 rounded-lg text-sm bg-white outline-none"
+                    >
+                      <option value="" disabled>-- בחר ספר --</option>
+                      {inventoryList.map(book => <option key={book.id} value={book.id}>{book.title}</option>)}
+                    </select>
+                    
+                    <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] md:text-xs text-slate-500">כמות:</label>
+                        <input type="number" min="1" value={item.amount} onChange={(e) => handleInvoiceItemChange(idx, 'amount', e.target.value)} className="w-16 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white" dir="ltr" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] md:text-xs text-slate-500">מחיר ליח' (₪):</label>
+                        <input type="number" min="0" value={item.price} onChange={(e) => handleInvoiceItemChange(idx, 'price', e.target.value)} className="w-20 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white text-indigo-600 font-bold" dir="ltr" />
+                      </div>
+                      <button type="button" onClick={() => removeInvoiceItemRow(idx)} className="text-slate-400 hover:text-red-500 p-1.5 bg-white rounded border border-slate-200"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                ))}
+                {invoiceItems.length === 0 && <p className="text-sm text-slate-500 text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">לא נבחרו ספרים להזמנה.</p>}
+              </div>
+
+              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 flex justify-between items-center mb-6">
+                <span className="font-bold text-emerald-900 text-sm md:text-base">סה"כ הזמנה לתשלום:</span>
+                <span className="text-xl md:text-2xl font-bold text-emerald-600">₪{invoiceItems.reduce((acc, item) => acc + (item.amount * item.price), 0).toLocaleString()}</span>
+              </div>
+
+              <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+                <h4 className="font-bold text-sm text-blue-900 mb-2">שליחה לספק</h4>
+                <p className="text-xs text-slate-600 mb-3">הודעת דוא״ל המכילה את פירוט ההזמנה המלא תיווצר ותישלח לכתובת <strong>{invoiceSupplier.email}</strong>.</p>
+                <button onClick={sendInvoiceEmail} disabled={invoiceItems.length === 0 || !invoiceItems[0].bookId} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed py-3 rounded-xl font-medium flex justify-center items-center gap-2 transition-colors">
+                  <Send className="w-4 h-4" /> צור ושלח פירוט הזמנה למייל
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Dashboard Stats Modal */}
       {isEditStatsModalOpen && editingStats && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -901,7 +1165,32 @@ export default function PublisherApp() {
                 <div><label className="block text-sm font-medium mb-1">סטטוס</label><select value={editingSupplier.status} onChange={e => setEditingSupplier({...editingSupplier, status: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50"><option>פעיל - יש הסכם</option><option>ללא הסכם מכירה</option><option>ממתין לספרים</option><option>אין שיתוף פעולה</option></select></div>
                 <div><label className="block text-sm font-medium mb-1">איש קשר</label><input required type="text" value={editingSupplier.contact} onChange={e => setEditingSupplier({...editingSupplier, contact: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" /></div>
                 <div><label className="block text-sm font-medium mb-1">טלפון</label><input required type="text" value={editingSupplier.phone} onChange={e => setEditingSupplier({...editingSupplier, phone: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" /></div>
+                <div><label className="block text-sm font-medium mb-1">אימייל</label><input required type="email" value={editingSupplier.email} onChange={e => setEditingSupplier({...editingSupplier, email: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" dir="ltr" /></div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-medium mt-4">שמור שינויים</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Marketing Campaign Modal */}
+      {isEditCampaignModalOpen && editingCampaign && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="p-4 md:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-base md:text-lg text-slate-800">עריכת קמפיין שיווק</h3>
+              <button onClick={() => setIsEditCampaignModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 md:p-5">
+              <form onSubmit={handleEditCampaignSubmit} className="space-y-4">
+                <div><label className="block text-sm font-medium mb-1">שם הקמפיין</label><input type="text" required value={editingCampaign.name} onChange={e => setEditingCampaign({...editingCampaign, name: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" /></div>
+                <div><label className="block text-sm font-medium mb-1">ספר מקודם</label><input type="text" required value={editingCampaign.book} onChange={e => setEditingCampaign({...editingCampaign, book: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-sm font-medium mb-1">תקציב (₪)</label><input type="number" required value={editingCampaign.budget} onChange={e => setEditingCampaign({...editingCampaign, budget: Number(e.target.value)})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" dir="ltr" /></div>
+                  <div><label className="block text-sm font-medium mb-1">נוצל (₪)</label><input type="number" required value={editingCampaign.spent} onChange={e => setEditingCampaign({...editingCampaign, spent: Number(e.target.value)})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" dir="ltr" /></div>
+                </div>
+                <div><label className="block text-sm font-medium mb-1">החזר / תוצאה (ROAS)</label><input type="text" required value={editingCampaign.roas} onChange={e => setEditingCampaign({...editingCampaign, roas: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50 focus:bg-white" dir="ltr" /></div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 md:py-2.5 rounded-xl font-medium mt-2">שמור קמפיין</button>
               </form>
             </div>
           </div>
