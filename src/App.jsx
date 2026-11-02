@@ -214,8 +214,7 @@ export default function PublisherApp() {
   // --- Background Email Sender ---
   const sendEmailBackground = async (toEmail, subject, body) => {
     if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_PUBLIC_KEY) {
-      showToast("EmailJS לא מוגדר. עובר לשימוש בתוכנת מייל רגילה...", "warning");
-      window.location.href = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      showToast("שגיאה: חסרים מפתחות EmailJS. לא ניתן לשלוח מייל.", "error");
       return;
     }
 
@@ -319,11 +318,11 @@ export default function PublisherApp() {
   const handleLogin = (e) => {
     e.preventDefault();
     const user = usersList.find(u => u.username === username && u.password === password);
+    
     if (user) {
       setUserRole(user.role);
       setCurrentUserName(user.name);
       setLoginError('');
-      showToast(`ברוך הבא, ${user.name}!`, 'success');
     } else {
       setLoginError('שם משתמש או סיסמה שגויים. נסה שוב.');
     }
@@ -340,7 +339,10 @@ export default function PublisherApp() {
 
     if (newUser.email) {
       const subject = "פרטי התחברות למערכת ניהול הוצאה לאור";
-      const body = `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת הניהול.\n\nשם משתמש: ${newUser.username}\nסיסמה: ${newUser.password}\n\nבברכה,\nצוות המערכת`;
+      const appUrl = window.location.origin; // השגת הקישור האוטומטי לאפליקציה
+      const body = `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת הניהול.\n\nשם משתמש: ${newUser.username}\nסיסמה: ${newUser.password}\n\nקישור כניסה למערכת:\n${appUrl}\n\nבברכה,\nצוות המערכת`;
+      
+      showToast("מקים משתמש ושולח מייל ברקע...", "info");
       sendEmailBackground(newUser.email, subject, body);
     } else {
       showToast("משתמש נוצר בהצלחה במערכת", "success");
@@ -357,8 +359,13 @@ export default function PublisherApp() {
     }
     setConfirmDialog({
       message: `האם אתה בטוח שברצונך למחוק את המשתמש ${usernameToRemove}?`,
-      onConfirm: () => {
-        setUsersList(usersList.filter(u => u.username !== usernameToRemove));
+      onConfirm: async () => {
+        const userToDelete = usersList.find(u => u.username === usernameToRemove);
+        if (db && userToDelete && userToDelete.id) {
+          await deleteDoc(getDocRef('users', userToDelete.id));
+        } else {
+          setUsersList(usersList.filter(u => u.username !== usernameToRemove));
+        }
         showToast("המשתמש הוסר מהמערכת", "info");
       }
     });
@@ -455,6 +462,7 @@ export default function PublisherApp() {
     const subject = `הזמנה / סיכום פרטי הפצה - ${invoiceSupplier.name}`;
     const body = `שלום ${invoiceSupplier.contact},\n\nלהלן סיכום הזמנת ספרים / תעודת משלוח מול ההוצאה לאור:\n\n${itemsText}\n\n--------------------------------\nסה"כ לתשלום / חיוב: ₪${totalOrderPrice.toLocaleString()}\n--------------------------------\n\nנא לאשר קבלת המייל וההזמנה.\n\nבברכה,\nהוצאה לאור.`;
     
+    showToast("שולח מייל לספק ברקע...", "info");
     sendEmailBackground(invoiceSupplier.email, subject, body);
     setIsSupplierInvoiceModalOpen(false);
   };
