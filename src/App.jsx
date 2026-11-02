@@ -17,7 +17,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
 const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
 const auth = app ? getAuth(app) : null;
 let db = app ? getFirestore(app) : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id.replace(/\//g, '_') : 'default-publisher-app';
+const appId = typeof __app_id !== 'undefined' ? String(__app_id).replace(/[^a-zA-Z0-9_-]/g, '_') : 'default-publisher-app';
 
 const getCollRef = (collName) => collection(db, 'artifacts', appId, 'public', 'data', collName);
 const getDocRef = (collName, docId) => doc(db, 'artifacts', appId, 'public', 'data', collName, docId);
@@ -243,21 +243,32 @@ export default function PublisherApp() {
         return true;
       } catch (e) {
         console.warn("Firebase permission denied. Falling back to local state mode.", e);
-        db = null; // Disable DB, use local state
         return false;
       }
     };
 
     seedDatabase().then((success) => {
-      if (!success) return;
-      unsubs.push(onSnapshot(getCollRef('inventory'), snap => setInventoryList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
-      unsubs.push(onSnapshot(getCollRef('suppliers'), snap => setSuppliersList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
-      unsubs.push(onSnapshot(getCollRef('campaigns'), snap => setCampaignsList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
-      unsubs.push(onSnapshot(getCollRef('prCopies'), snap => setPrCopies(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
-      unsubs.push(onSnapshot(getCollRef('tasks'), snap => setTasksList(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error));
-      unsubs.push(onSnapshot(getDocRef('globals', 'stats'), snap => {
-        if (snap.exists()) setStatsData(snap.data());
-      }, console.error));
+      if (!success) {
+        db = null; // Disable DB completely if seeding/reading fails
+        return;
+      }
+      const handleDbError = (err) => {
+        console.warn("Firebase sync error, disabling cloud sync.", err);
+        db = null;
+      };
+
+      try {
+        unsubs.push(onSnapshot(getCollRef('inventory'), snap => setInventoryList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('suppliers'), snap => setSuppliersList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('campaigns'), snap => setCampaignsList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('prCopies'), snap => setPrCopies(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('tasks'), snap => setTasksList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getDocRef('globals', 'stats'), snap => {
+          if (snap.exists()) setStatsData(snap.data());
+        }, handleDbError));
+      } catch (e) {
+        handleDbError(e);
+      }
     });
 
     return () => unsubs.forEach(unsub => unsub());
@@ -310,8 +321,8 @@ export default function PublisherApp() {
 
   // Helper to calculate total stock
   const calculateTotalStock = (book) => {
-    const suppliersTotal = book.breakdown.reduce((sum, item) => sum + Number(item.amount), 0);
-    return Number(book.publisherStock) + suppliersTotal;
+    const suppliersTotal = (book.breakdown || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    return Number(book.publisherStock || 0) + suppliersTotal;
   };
 
   const handleExportCSV = () => {
@@ -369,7 +380,7 @@ export default function PublisherApp() {
     if (field === 'bookId') {
       newItems[index].bookId = value;
       const book = inventoryList.find(b => b.id === value);
-      if (book) newItems[index].price = book.prices.supplier;
+      if (book) newItems[index].price = book?.prices?.supplier || 0;
     } else {
       newItems[index][field] = Number(value);
     }
@@ -769,20 +780,20 @@ export default function PublisherApp() {
                             </div>
                           </td>
                           <td className="py-4 px-4 text-center bg-indigo-50/30">
-                            <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
-                            <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="flex flex-col gap-1.5 min-w-[180px]">
-                              {book.breakdown.length > 0 ? book.breakdown.map((item, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-xs md:text-sm border-b border-slate-100/50 pb-1 last:border-0 last:pb-0 gap-2">
-                                  <span className="text-slate-500 truncate">{item.supplier}</span>
-                                  <span className="font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded text-xs">{item.amount.toLocaleString()}</span>
-                                </div>
-                              )) : <span className="text-xs text-slate-400">לא משויך לספקים</span>}
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-center bg-emerald-50/30">
+                    <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
+                    <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
+                  </td>
+                  <td className="py-4 px-4">
+                    <div className="flex flex-col gap-1.5 min-w-[180px]">
+                      {book.breakdown && book.breakdown.length > 0 ? book.breakdown.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-xs md:text-sm border-b border-slate-100/50 pb-1 last:border-0 last:pb-0 gap-2">
+                          <span className="text-slate-500 truncate">{item.supplier}</span>
+                          <span className="font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded text-xs">{item.amount.toLocaleString()}</span>
+                        </div>
+                      )) : <span className="text-xs text-slate-400">לא משויך לספקים</span>}
+                    </div>
+                  </td>
+                  <td className="py-4 px-4 text-center bg-emerald-50/30">
                             <div className="font-bold text-emerald-700 text-xl md:text-2xl">{totalAvailableStock.toLocaleString()}</div>
                           </td>
                           <td className="py-4 px-4 text-center">
@@ -872,11 +883,11 @@ export default function PublisherApp() {
                         <h3 className="font-bold text-slate-700">{col.title}</h3>
                       </div>
                       <div className="flex-1 space-y-3">
-                        {tasks[col.id]?.map((task) => {
-                          const totalExpenses = task.invoices ? task.invoices.reduce((sum, inv) => sum + inv.amount, 0) : 0;
-                          const filesCount = (task.coverFile ? 1 : 0) + (task.bookFile ? 1 : 0) + (task.dedicationFile ? 1 : 0);
-                          
-                          return (
+                {tasks[col.id]?.map((task) => {
+                  const totalExpenses = task.invoices ? task.invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0) : 0;
+                  const filesCount = (task.coverFile ? 1 : 0) + (task.bookFile ? 1 : 0) + (task.dedicationFile ? 1 : 0);
+                  
+                  return (
                             <div 
                               key={task.id} 
                               onClick={() => setSelectedTask(task)}
@@ -1664,58 +1675,58 @@ export default function PublisherApp() {
               </section>
 
               {/* Invoices Section */}
-              <section>
-                <div className="flex justify-between items-end mb-4">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-indigo-600" />
-                    מעקב הוצאות וחשבוניות (תמחור)
-                  </h3>
-                  <div className="text-sm font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">
-                    סה"כ: ₪{selectedTask.invoices.reduce((s, i) => s + i.amount, 0).toLocaleString()}
-                  </div>
-                </div>
-                
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
-                  <table className="w-full text-right text-sm">
-                    <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 px-4 font-medium">תיאור הוצאה</th>
-                        <th className="py-2.5 px-4 font-medium">סכום</th>
-                        <th className="py-2.5 px-4 font-medium text-center">אסמכתא</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {selectedTask.invoices.map(inv => (
-                        <tr key={inv.id}>
-                          <td className="py-3 px-4 font-medium text-slate-700">{inv.desc}</td>
-                          <td className="py-3 px-4 text-slate-600">₪{inv.amount.toLocaleString()}</td>
-                          <td className="py-3 px-4 text-center">
-                            {inv.receiptFile ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                                <CheckCircle className="w-3 h-3" /> הועלה
-                              </span>
-                            ) : (
-                              userRole === 'admin' ? (
-                                <button onClick={() => handleInvoiceReceiptUpload(inv.id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center justify-center gap-1 mx-auto">
-                                  <Upload className="w-3 h-3" /> צרף קבלה
-                                </button>
-                              ) : (
-                                <span className="text-xs text-slate-400">חסר</span>
-                              )
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {selectedTask.invoices.length === 0 && (
-                        <tr>
-                          <td colSpan="3" className="py-6 text-center text-slate-400">אין הוצאות רשומות לספר זה.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+      <section>
+        <div className="flex justify-between items-end mb-4">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-indigo-600" />
+            מעקב הוצאות וחשבוניות (תמחור)
+          </h3>
+          <div className="text-sm font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">
+            סה"כ: ₪{(selectedTask.invoices || []).reduce((s, i) => s + (i.amount || 0), 0).toLocaleString()}
+          </div>
+        </div>
+        
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
+          <table className="w-full text-right text-sm">
+            <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+              <tr>
+                <th className="py-2.5 px-4 font-medium">תיאור הוצאה</th>
+                <th className="py-2.5 px-4 font-medium">סכום</th>
+                <th className="py-2.5 px-4 font-medium text-center">אסמכתא</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(selectedTask.invoices || []).map(inv => (
+                <tr key={inv.id}>
+                  <td className="py-3 px-4 font-medium text-slate-700">{inv.desc}</td>
+                  <td className="py-3 px-4 text-slate-600">₪{inv.amount.toLocaleString()}</td>
+                  <td className="py-3 px-4 text-center">
+                    {inv.receiptFile ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                        <CheckCircle className="w-3 h-3" /> הועלה
+                      </span>
+                    ) : (
+                      userRole === 'admin' ? (
+                        <button onClick={() => handleInvoiceReceiptUpload(inv.id)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center justify-center gap-1 mx-auto">
+                          <Upload className="w-3 h-3" /> צרף קבלה
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">חסר</span>
+                      )
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {(!selectedTask.invoices || selectedTask.invoices.length === 0) && (
+                <tr>
+                  <td colSpan="3" className="py-6 text-center text-slate-400">אין הוצאות רשומות לספר זה.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-                {userRole === 'admin' && (
+        {userRole === 'admin' && (
                   <form onSubmit={handleAddInvoice} className="flex gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <input 
                       required type="text" placeholder="תיאור (למשל: עריכה לשונית)" 
